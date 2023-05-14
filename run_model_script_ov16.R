@@ -22,12 +22,12 @@ trt.int = 1
 
 
 #ABR_in <- 41922 #annual biting rate
-brz <- c(1500, 2000, 3000)
-
-abr_vec <- rep(brz, 400)
-
-
-ABR.in <- abr_vec[runif(1, 1, length(abr_vec))]
+# brz <- c(1500, 2000, 3000)
+#
+# abr_vec <- rep(brz, 400)
+#
+#
+# ABR.in <- abr_vec[runif(1, 1, length(abr_vec))]
 ABR.in <- 1500
 
 output_equilibrium <-  ep.equi.sim(time.its = timesteps,
@@ -224,23 +224,24 @@ write.csv(allOutputs, "data.csv")
 #---- Single Run -----#
 
 output <- ep.equi.sim(time.its = timesteps,
-                       ABR = ABR.in,
-                       treat.int = trt.int,
-                       treat.prob = 0.80,
-                       give.treat = give.treat.in,
-                       treat.start = treat.strt,
-                       treat.stop = treat.stp,
-                       treat.timing = NA,
-                       pnc = 0.01,
-                       min.mont.age = 5,
-                       vector.control.strt = NA,
-                       delta.hz.in = 0.186,
-                       delta.hinf.in = 0.003,
-                       c.h.in = 0.005,
-                       gam.dis.in = 0.3,
-                       run_equilibrium = TRUE,
-                       print_progress=TRUE,
-                       calc_ov16 = TRUE)
+                      ABR = ABR.in,
+                      treat.int = trt.int,
+                      treat.prob = 0.80,
+                      give.treat = give.treat.in,
+                      treat.start = treat.strt,
+                      treat.stop = treat.stp,
+                      treat.timing = NA,
+                      pnc = 0.01,
+                      min.mont.age = 5,
+                      vector.control.strt = NA,
+                      delta.hz.in = 0.186,
+                      delta.hinf.in = 0.003,
+                      c.h.in = 0.005,
+                      gam.dis.in = 0.3,
+                      run_equilibrium = FALSE,
+                      equilibrium = output_equilibrium$all_equilibrium_outputs,
+                      print_progress=TRUE,
+                      calc_ov16 = TRUE)
 
 age <- output$all_infection_burdens[,2]
 
@@ -297,7 +298,7 @@ for (file in list.files('data/ov16_output/')) {
 
 
 # viz
-
+#allOutputs <- tmp_df
 allOutputs <- allOutputs %>% filter(!is.na(allOutputs$run_num)) %>% mutate(new_age = round(age/10)*10,
                                     age_groups = case_when(
                                       age < 2 ~ 2,

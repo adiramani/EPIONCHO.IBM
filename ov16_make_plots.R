@@ -1,10 +1,13 @@
 allOutputs <- data.frame(matrix(ncol=9))
 colnames(allOutputs) <- c("age", "sex", "ov16_pos", "mf_prev", "age_pre", "sex_pre", "ov16_pos_pre", "mf_prev_pre", "run_num")
 
+files <- c('ov16_output_1/', 'ov16_output_l3/')
+fileToUse <- paste("data/", files[2], sep="")
+
 i <- 1
-for (file in list.files('data/ov16_output_1/')) {
+for (file in list.files(fileToUse)) {
   print(i)
-  tmpRDSData <- readRDS(paste('data/ov16_output_1/', file,sep=""))
+  tmpRDSData <- readRDS(paste(fileToUse, file,sep=""))
   age <- tmpRDSData$all_infection_burdens[,2]
   age_pre <- tmpRDSData$all_infection_burdens_pre_treatment[,2]
 

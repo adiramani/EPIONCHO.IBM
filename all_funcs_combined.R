@@ -79,8 +79,7 @@ ep.equi.sim <- function(time.its,
                         print_progress = TRUE,
                         epilepsy_module = "NO",
                         OAE_equilibrium,
-                        calc_ov16=FALSE,
-                        testing_thing=TRUE)
+                        calc_ov16=FALSE)
 
 
 {
@@ -719,13 +718,13 @@ ep.equi.sim <- function(time.its,
 
     #ov16_sero
     if(calc_ov16) {
-      female_L5 <- all.mats.temp[, nfw.start]
-      male_L5 <- all.mats.temp[, worms.start]
+      indv_L3 <- all.mats.temp[, 6]
+      indv_antib <- all.mats.temp[,num.cols+ov16.col]
 
-      new_inf_Ov16 <- which((male_L5 > 0 | female_L5 > 0) & Ov16_Seropositive == 0 & all.mats.temp[,91] == 1)
+      new_inf_Ov16 <- which(indv_L3 > 0 & Ov16_Seropositive == 0 & indv_antib == 1)
       Ov16_Seropositive[new_inf_Ov16] <- 1
 
-      mf_indv_prev <- as.integer(temp.mf[[2]] > 0) #as.integer(mf.temp > 0)
+      mf_indv_prev <- as.integer(temp.mf[[2]] > 0)
       prev_Ov16 <- c(prev_Ov16, sum(Ov16_Seropositive)/N)
     }
 
