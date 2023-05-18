@@ -1,13 +1,911 @@
-library(dplyr)
-library(ggplot2)
-library(foreach)
-library(doParallel)
-
-#iter <- as.numeric(Sys.getenv("PBS_ARRAY_INDEX"))
-iter <- 1000
-set.seed(iter + (iter*3758))
 
 
+#### Current file: R/adult_worm_dynamics_functions.R
+
+#' @title
+#' delta.h
+#' @description
+#' proportion of L3 larvae (final life stage in the fly population) developing into adult worms in humans (Pi_H in Hamley et al. 2019)
+#' @param delta.hz proportion of L3 larvae establishing/ developing to adult stage within human host, per bit, when ATP tends to 0
+#' @param delta.hinf proportion of L3 larvae establishing/ developing to adult stage within human host, per bit, when ATP tends to infinity
+#' @param c.h severity of transmission intensity - dependent parasite establishment within humans
+#' @param L3 mean number of L3 in fly population
+#' @param m  vector to human host ratio
+#' @param beta per blackfly biting rate on humans (product of proportion of blackfly bites take on humans (h) & reciprocal of the duration of the gonotrophic cycle (g))
+#' @param expos individuals total (age/sex-specific and individual-specific) exposure to blackfly bites
+#'
+#' @returns vector of density-dependent (delta_h) values per individual in the population
+delta.h <- function(delta.hz, delta.hinf, c.h, L3, m , beta, expos)
+
+{
+  out <- (delta.hz + delta.hinf * c.h * m * beta *  L3 * expos) / (1 + c.h * m * beta * L3 * expos)
+  return(out)
+}
+
+
+#' @title
+#' Wplus1.rate
+#' @description
+#' Individual rate of acquisition of new infections (male and female adult worms) in humans
+#' @param delta.hz proportion of L3 larvae establishing/ developing to adult stage within human host, per bit, when ATP tends to 0
+#' @param delta.hinf proportion of L3 larvae establishing/ developing to adult stage within human host, per bit, when ATP tends to infinity
+#' @param c.h severity of transmission intensity - dependent parasite establishment within humans
+#' @param L3 mean number of L3 in fly population
+#' @param m  vector to human host ratio
+#' @param beta per blackfly biting rate on humans (product of proportion of blackfly bites take on humans (h) & reciprocal of the duration of the gonotrophic cycle (g))
+#' @param expos individuals total (age/sex-specific and individual-specific) exposure to blackfly bites
+#' @param DT timestep
+#'
+#' @returns vector of acquisition rates (probabilities) per individual in the population
+Wplus1.rate <- function(delta.hz, delta.hinf, c.h, L3, m , beta, expos, DT)
+
+{
+  dh <- delta.h(delta.hz, delta.hinf, c.h, L3, m , beta, expos) # matt: density-dep (L3 establishing in human host)
+
+  out <- DT * m * beta * dh * expos * L3 # matt: individual rate of acquisition of male / female adult worms - distrecte-time stochastic process with this probablility (pg.7 SI) ?
+
+  return(out)
+}
+
+#' @title
+#' weibull.mortality
+#' @description
+#' age-dependent mortality for adult worms and microfilariae (mortality rates assumed to increase as a funcction of parasite age, according to a Weibull distribution of survival times)
+#' @param DT timestep
+#' @param par1 shape parameter 1 in Weibull distribution (y_l in Hamley et al. 2019 supplementary material; equations S6 and S7)
+#' @param par2 shape parameter 2 in Weibull distribution (d_l in Hamley et al. 2019 supplementary material; equations S6 and S7)
+#' @param age.cats vector of age categories for mf or adults worms (default is 21)
+#'
+#' @returns vector of mortality rates (mf or adult worms) for each age class/category
+weibull.mortality <- function(DT, par1, par2, age.cats)
+
+{
+  out <- DT  * (par1 ^ par2) * par2 * (age.cats ^ (par2-1))
+
+  return(out)
+}
+
+
+#' @title
+#' change.worm.per.ind1
+#' @description
+#' Extracting key columns from overall matrix & evaluating different worm categories (for a specific age class of worms in each individual population).
+#' These vectors are important for the next functions to calculate change in number of adults in one adult worm age class for all people.
+#' @param treat.vec vector of treatment values (1 or 0) for each individual in the population
+#' @param lambda.zero per-capita rate that female worms lose their fertility (W_FF) & return to non-fertile state (W_FN); default value of 0.33 year-1
+#' @param DT timestep
+#' @param omeg per-capita rate that female worms progress from non-fertile (W_FN) to fertile (W_FF); default is 0.59 year-1
+#' @param ws starting worm compartment (first age class) - this is column 28 in the main matrix
+#' @param compartment which worm age-compartment (iteration k)
+#' @param total.dat main matrix containing different worm compartments for age-classes
+#' @param mort.rates vector of mortality rates (adult worms) for each age class/category
+#' @param time.each.comp Duration of each age class for adult worms (q_W in Hamley et al. 2019 supp); 1 year default
+#' @param new.worms.m vector of (binomial) drawn adult male worms from last column of delay matrix
+#' @param w.f.l.c vector for worms coming from previous compartment (0 when k ==1)
+#' @param num.comps number of age compartments for each worm category
+#'
+#' @returns list containing vector/values of a) lambda values per individual, b) mortality value for females per individual c) buman pop size
+#' d) number of current non-fertile female worms per individual e) number of current fertile female worms per individual
+#' f) treatment or no treatment value per individual g) omega value per individual h) total male worms per individual i) male worms lost per individual
+change.worm.per.ind1 <- function(treat.vec, lambda.zero, DT, omeg, ws, compartment, total.dat,
+                                 mort.rates, time.each.comp, new.worms.m, w.f.l.c, num.comps)
+{
+  N <- length(treat.vec)
+
+  lambda.zero.in <- rep(lambda.zero * DT, N) #loss of fertility
+  omeg <- rep(omeg * DT, N) #becoming fertile
+
+  #male worms
+
+  cl <- (ws-1) + compartment #calculate which column to use depending on sex, type (fertile or infertile) and compartment
+
+  cur.Wm <- total.dat[, cl] #take current number of worms from matrix
+
+  worm.dead.males <- rbinom(N, cur.Wm, rep(mort.rates[compartment], N))
+  worm.loss.males <- rbinom(N, (cur.Wm - worm.dead.males), rep((DT / time.each.comp), N))
+
+
+  if(compartment == 1)
+
+  {
+    male.tot.worms <- cur.Wm + new.worms.m - worm.loss.males - worm.dead.males
+  }
+
+  if(compartment > 1)
+
+  {
+    male.tot.worms <- cur.Wm + w.f.l.c[[2]] - worm.loss.males - worm.dead.males
+  }
+
+  #female worms
+
+  clnf <- (ws - 1) + num.comps + compartment #column for infertile females, num.comps skips over males
+
+  clf <- (ws - 1) + 2*num.comps + compartment #column for fertile females, 2*num.comps skips over males and infertile females
+
+  cur.Wm.nf <- total.dat[, clnf] #take current worm number from matrix infertile females
+
+  cur.Wm.f <- total.dat[, clf] #take current worm number from matrix fertile females
+
+  mort.fems <- rep(mort.rates[compartment], N)
+
+
+  return(list(lambda.zero.in, mort.fems, N, cur.Wm.nf, cur.Wm.f, treat.vec,
+              omeg, male.tot.worms, worm.loss.males))
+}
+
+
+#' @title
+#' change.worm.per.ind.treat
+#' @description
+#' updating worm compartments based on treatment (if this occurs) i.e., considering additional mortality and loss of fertility due to ivermectin treatment;
+#' approach assumes individuals which are moved from fertile to non and fertile class due to treatment re-enter fertile class at standard rate
+#' @param give.treat value (1 or 0) indicating whether treatment occurs
+#' @param iteration iteration along vector of times
+#' @param treat.start iteration where treatment starts
+#' @param times.of.treat sequence of treatment times
+#' @param treat.stop iteration where treatment stops
+#' @param onchosim.cov vector of which individuals will be treated if treatment is given
+#' @param treat.vec vector of times since treatment for each individual
+#' @param DT timestep
+#' @param cum.infer proportion of adult female worms made permanently infertility due to ivermectin at each round (lambda'_p in Hamley et al. 2019 supp); default is 0.345
+#' @param lam.m embryostatic effects of ivermectin; lam.m is the max rate of transient treatment-induced sterility (lambda_max in Hamley et al. 2019 supp): default is 32.4 year-1
+#' @param phi rate of decay of ivermectin-induced female worm sterlisation; default is 19.6 year-1
+#' @param N total human population size
+#' @param mort.fems vector of mortality rates (adult worms) for each age class/category; updated in change.worm.per.ind1
+#' @param lambda.zero.in updated vector of per-capita rate that female worms lose their fertility & return to non-fertile state
+#'
+#' @returns list containing vector of a) updated lambda values per individual, b) updated (or not) vector of times since treatment for each individual
+change.worm.per.ind.treat <- function(give.treat, iteration, treat.start, times.of.treat, treat.stop,
+                                 onchosim.cov, treat.vec, DT, cum.infer, lam.m, phi, N,
+                                 mort.fems, lambda.zero.in)
+{
+
+  if(give.treat == 1 & iteration >= treat.start)
+  {
+
+    if((sum(times.of.treat == iteration) == 1) & iteration <= treat.stop) #is it a treatment time
+
+    {
+      #print('TREATMENT GIVEN')
+
+      inds.to.treat <- which(onchosim.cov == 1) #which individuals will received treatment
+
+      treat.vec[inds.to.treat]  <-  (iteration-1) * DT #alter time since treatment
+      #cum.infer is the proportion of female worms made permanently infertile, killed for simplicity
+      if(iteration > treat.start) {mort.fems[inds.to.treat] <- mort.fems[inds.to.treat] + (cum.infer)} #alter mortality
+    }
+
+
+    tao <- ((iteration-1)*DT) - treat.vec #vector of toas, some will be NA
+
+    lam.m.temp <- rep(0, N); lam.m.temp[which(is.na(treat.vec) != TRUE)] <- lam.m #individuals which have been treated get additional infertility rate
+
+    f.to.nf.rate <- DT * (lam.m.temp * exp(-phi * tao)) #account for time since treatment (fertility reduction decays with time since treatment)
+
+    f.to.nf.rate[which(is.na(treat.vec) == TRUE)] <- 0 #these entries in f.to.nf.rate will be NA, lambda.zero.in cannot be NA
+
+    lambda.zero.in <- lambda.zero.in + f.to.nf.rate #update 'standard' fertile to non fertile rate to account for treatment
+
+  }
+
+  return(list(lambda.zero.in, treat.vec, mort.fems))
+
+}
+
+#' @title
+#' change.worm.per.ind2
+#' @description
+#' final function to calculate the change in the number of adult worms in one adult worm age class for all people
+#' @param DT timestep
+#' @param time.each.comp Duration of each age class for adult worms (q_W in Hamley et al. 2019 supp); 1 year default
+#' @param compartment which worm age-compartment (iteration k)
+#' @param new.worms.nf.fo new non-fertile female worms (binomial draw)
+#' @param w.f.l.c vector for worms coming from previous compartment (0 when k ==1)
+#' @param N total human population size
+#' @param cur.Wm.nf number of current non-fertile female worms per individual
+#' @param mort.fems mortality value for females per individual (from change.worm.per.ind1 function)
+#' @param cur.Wm.f number of current fertile female worms per individual
+#' @param omeg omega value per individual (from change.worm.per.ind1 function)
+#' @param male.tot.worms vector of total male worms per individual (from change.worm.per.ind1 function)
+#' @param worm.loss.males vector of male worms lost per individual (from change.worm.per.ind1 function)
+#' @param lambda.zero.in updated lambda values per individual (updated fertile to non fertile rate to account for treatment or non-updated) from change.worm.per.ind.treat
+#' @param treat.vec updated (or not) vector of times since treatment for each individual from change.worm.per.ind.treat
+#'
+#' @returns list containing vector of a) total male worms per individual (not updated on treatment, so from change.worm.per.ind1),
+#' b) male worms lost per individual (not updated on treatment, so from change.worm.per.ind1), c) vector of non-fertile female worms per individual
+#' d) vector of fertile female worms per individual, e) vector of number of non-fertile worms lost per individual,
+#' f) vector of number fertile worms lost per individual, g) updated (or not) vector of times since treatment for each individual (taken from change.worm.per.ind.treat)
+change.worm.per.ind2 <- function(DT, time.each.comp, compartment, new.worms.nf.fo, w.f.l.c,
+                                 N, cur.Wm.nf, mort.fems, cur.Wm.f, omeg,
+                                 male.tot.worms, worm.loss.males,
+                                 lambda.zero.in, treat.vec)
+
+{
+  worm.dead.nf <- rbinom(N, cur.Wm.nf, mort.fems) #movement to next compartment
+
+  worm.dead.f <- rbinom(N, cur.Wm.f, mort.fems)
+
+  worm.loss.age.nf <- rbinom(N, (cur.Wm.nf - worm.dead.nf), rep((DT / time.each.comp), N))
+
+  worm.loss.age.f <- rbinom(N, (cur.Wm.f - worm.dead.f), rep((DT / time.each.comp), N))
+
+
+  #calculate worms moving between fertile and non fertile, deaths and aging
+
+  #females from fertile to infertile
+
+  new.worms.nf.fi <- rep(0, N)
+
+  trans.fc <- which((cur.Wm.f - worm.dead.f - worm.loss.age.f) > 0)
+
+  #individuals which still have fertile worms in an age compartment after death and aging
+  if(length(trans.fc) > 0)
+  {
+    new.worms.nf.fi[trans.fc] <- rbinom(length(trans.fc), (cur.Wm.f[trans.fc] - worm.dead.f[trans.fc] - worm.loss.age.f[trans.fc]), lambda.zero.in[trans.fc])
+  }
+
+
+  #females worms from infertile to fertile, this happens independent of males, but production of mf depends on males
+
+  #individuals which still have non fertile worms in an age compartment after death and aging
+  new.worms.f.fi <- rep(0, N)
+
+  trans.fc <-  which((cur.Wm.nf - worm.dead.nf - worm.loss.age.nf) > 0)
+  if(length(trans.fc) > 0)
+  {
+    new.worms.f.fi[trans.fc] <- rbinom(length(trans.fc), (cur.Wm.nf[trans.fc] - worm.dead.nf[trans.fc] - worm.loss.age.nf[trans.fc]), omeg[trans.fc])#females moving from infertile to fertile
+  }
+
+
+  if(compartment == 1) #if it's the first adult worm age compartment
+
+  {
+    nf.out <- cur.Wm.nf + new.worms.nf.fo + new.worms.nf.fi - worm.loss.age.nf - new.worms.f.fi - worm.dead.nf #final number of infertile worms
+
+    f.out <- cur.Wm.f + new.worms.f.fi - worm.loss.age.f - new.worms.nf.fi - worm.dead.f #final number of fertile worms
+  }
+
+  if(compartment > 1)
+
+  {
+    nf.out <- cur.Wm.nf + new.worms.nf.fi - worm.loss.age.nf - new.worms.f.fi + w.f.l.c[[5]] - worm.dead.nf#w.f.l.c = worms from previous compartment
+
+    f.out <- cur.Wm.f + new.worms.f.fi - worm.loss.age.f - new.worms.nf.fi + w.f.l.c[[6]] - worm.dead.f
+  }
+
+
+  return(list(male.tot.worms,
+              worm.loss.males,
+              nf.out,
+              f.out,
+              worm.loss.age.nf,
+              worm.loss.age.f, treat.vec))
+
+}
+
+
+
+
+#### Current file: R/epilepsy_module_functions.R
+
+#' @title
+#' OAE probability function
+#' @description
+#' calculate onchocerciasis-associated epilepsy (OAE) probabilities for mean mf counts
+#'
+#' @param dat this is the data from Chesnais et al. 2018 with OAE probabilities for 7 mean mf loads in Cameroon
+#'
+#' @returns vector of OAE probabilities for mf counts from 0 to 1000
+OAE_mfcount_prob_func <- function(dat){
+
+  # ep_mfcount_prob_df <- data.frame(prob = c(0.0061, 0.0439, 0.0720, 0.0849, 0.1341, 0.1538, 0.20),
+  #                                  mf = c(0, 3, 13, 36, 76, 151, 200)) # data from Chesnais et al. 2018
+
+
+  fit <- glm(prob ~ log(mf + 1), family = gaussian(link = "log"),
+             data = dat) # fitted logarithmic relationship between prob OAE ~ mean mf load;
+                                         # generalized linear model with log-link function
+
+  newdat <- data.frame(mf = seq(0, 10000, 1)) # generate new dataframe with mf counts from 0 to 1000 by 1
+
+  out <- predict(fit, newdata = newdat, se.fit = T) # use predict function to calculate log(OAE prob) for each mean mf count in newdat
+
+  logpred <- data.frame(fit = out$fit, se = out$se.fit, mf = newdat$mf) # create dataframe with predicted log(OAE probs), standard error and mf counts
+
+  logpred <- within(logpred, {
+    lwr <- fit - 1.96 * se
+    upr <- fit + 1.96 * se
+  }) # calculate lwr and upper confidence intervals for log(OAE probs)
+
+  pred <- data.frame(fit = exp(logpred$fit), lwr = exp(logpred$lwr), upr = exp(logpred$upr), mf = logpred$mf) # exponentiate probabilities
+
+  OAE_probs <- pred$fit # extract probabilities into a vector
+
+  return(OAE_probs)
+
+}
+
+
+#' @title
+#' find individuals which develop OAE
+#'
+#' @description
+#' find individuals sampled between specific ages (default is 3 - 10 yrs) with new worm infection
+#' and can then develop onchocerciasis-associated epilepsy (OAE) in the next function
+#' (determined by probability associated with individual mf load)
+#'
+#' @param dat this is the master matrix (all.mats.temp) tracking mf and worm compartments (by age) for each individual
+#' @param mf.start starting column for mf in master matrix
+#' @param mf.end final column for mf in master matrix
+#' @param worms.start starting column for adult worms in master matrix
+#' @param nfw.start # start of infertile worms
+#' @param fw.end # end of fertile worms
+#' @param infected_at_all vector of all individuals to identify new infections for OAE disease
+#' @param age_to_samp sample of ages for each individual (default between 3 - 10 yrs of age) to match to ages in main matrix
+#' @param OAE vector of individuals defined as able to develop to OAE/ to determine whether OAE onset occurs
+#' @param tested_OAE vector to specify which individuals have been tested
+#'
+#' @returns vector with positions of new cases in the population
+find_indiv_OAE_func <- function(dat, mf.start, mf.end, worms.start, nfw.start, fw.end,
+                                infected_at_all, age_to_samp, OAE, tested_OAE, check_ind){
+
+  mf_all <- rowSums(dat[, mf.start : mf.end]) # sum mf per individual across all 21 age classes
+
+  # worms_all <- rowSums(dat[, worms.start : tot.worms]) # OLD: sum all worm categories per host (across 21 age classes)
+
+  male_worms_all <- rowSums(dat[, worms.start : nfw.start - 1]) # sum all male worms per host (across 21 age classes)
+  female_worms_all <- rowSums(dat[, nfw.start : fw.end]) # sum all female worms per host (across 21 age classes)
+
+  # ind_new_inf <- which(worms_all > 0 & infected_at_all == 0) # find individuals with at least 1 worm & no previous infection (therefore new)
+
+  ind_new_inf <- which(male_worms_all > 0 & female_worms_all > 0 & infected_at_all == 0) # find individuals where both male and female worms present
+                                                                                         # (i.e. pair of mating worms present in host)
+
+  # print(ind_new_inf)
+
+  infected_at_all[ind_new_inf] <-  1 # where new worm infection, give value 1 at individual position in vector
+
+  ind_age <- which(round(dat[, 2]) == round(age_to_samp)) # find individuals (position in individual vector) where (rounded)
+                                                          # age at sampling (e.g. between 3 - 10) matches (rounded) age of individual
+
+  # print(ind_age)
+
+  ind_ibf <- which(infected_at_all == 1) # extract position of currently with worm infection to inform OAE (not new infection to inform OAE)
+
+  ind_no_OAE <- which(OAE != 1) # extract position of individuals without OAE (so no current OAE?)
+
+  ind_no_samp <- which(tested_OAE == 0) # extract position of individuals not (previously?) tested
+
+  # print(age_to_samp)
+
+  tot_ind_ep_samp <- Reduce(intersect, list(ind_age, ind_ibf, ind_no_OAE, ind_no_samp)) # find common (intersect) ??? where same individual (position number in vector)
+                                                                                                 # present in all vectors (age sampled, new infection/OAE, no current OAE?,
+                                                                                                 # not previously sampled?, sex of individual?)
+                                                                                                 # defines new infections/OAE?
+  check_ind <- c(check_ind, length(tot_ind_ep_samp)) #
+
+  return(list(tot_ind_ep_samp, infected_at_all, check_ind))
+
+}
+
+#' @title
+#' calculate OAE incidence and prevalence
+#'
+#' @description
+#' each individual undergoes a Bernoulli trial (using OAE probabilities based on mf counts; new worm infection)
+#' to ascertain new incident cases of OAE (indexed by those individuals with new infection?)
+#'
+#' @param temp.mf vector of all mf per skin snip for each individual
+#' @param tot_ind_ep_samp vector with positions of new cases in the population
+#' @param OAE_probs vector of OAE probabilities for mf counts from 0 to 1000
+#' @param dat main matrix tracking age, sex, mf age compartments and worm age compartments for each individual
+#' @param prev_OAE vector containing prevalence of OAE to update
+#' @param OAE vector of individuals defined as able to develop to OAE/ to determine whether OAE onset occurs
+#' @param tested_OAE vector to specify which individuals have been tested
+#' @param OAE_incidence_DT OAE incidence vector (whole population) to update
+#' @param OAE_incidence_DT_under_5 OAE incidence vector in under 5 years (3 - 5 years) to update
+#' @param OAE_incidence_DT_5_10 OAE incidence vector in 5 - 10 years to update
+#' @param OAE_incidence_DT_11_15 OAE incidence vector in 10 - 15 years to update
+#' @param OAE_incidence_DT_M OAE incidence vector in males to update
+#' @param OAE_incidence_DT_F OAE incidence vector in females to update
+#'
+#' @returns list containing i) updated OAE prevalence, ii) updated OAE incidence in whole population, iii - vi) updated OAE
+#' incidence in under 5 years, 5 - 10 years, 10 - 15 years, and males and females, vii) OAE probabilities for each individual based on mf count,
+#' viii) those tested/sampled
+new_OAE_cases_func <- function(temp.mf, tot_ind_ep_samp, OAE_probs, dat,
+                               prev_OAE, OAE, tested_OAE,
+                               OAE_incidence_DT, OAE_incidence_DT_under_5, OAE_incidence_DT_5_10, OAE_incidence_DT_11_15,
+                               OAE_incidence_DT_M, OAE_incidence_DT_F){
+
+
+  mf_round <- round(temp.mf[[2]][tot_ind_ep_samp]) + 1 # mf count (in those tested ?)
+                                                       # note: if zero the first probability comes from from ep_probs
+                                                       # note: +1 to account for (log) 0
+
+
+  OAE_rates <- OAE_probs[mf_round] # get probabilities (based on individual mf count)
+
+  OAE[tot_ind_ep_samp] <- rbinom(length(tot_ind_ep_samp), 1, OAE_rates) # for individuals (those positions of individuals as new cases)
+                                                                        # with an probability of OAE, they undergo a
+                                                                        # Bernoulli trial to ascertain whether OAE onset realized
+
+  tested_OAE[tot_ind_ep_samp] <- 1 # records that they've been tested (those identified in tot_ind_ep_samp are indexed)
+
+  prev_OAE <- c(prev_OAE, mean(OAE)) # calculate & update prevalence of OAE
+
+  new_inc <- length(which(OAE[tot_ind_ep_samp] == 1)) # how many infections (finds total new infected/OAE in all OAE)
+
+  OAE_incidence_DT <- c(OAE_incidence_DT, new_inc) # record + update number of new OAE cases
+
+  new_inc_under_5 <- length(which(OAE[tot_ind_ep_samp] == 1 & dat[tot_ind_ep_samp ,2] >= 3 & dat[tot_ind_ep_samp ,2]< 5 )) # new cases in under 5 age group
+  new_inc_5_10 <- length(which(OAE[tot_ind_ep_samp] == 1 & dat[tot_ind_ep_samp ,2] >= 5 & dat[tot_ind_ep_samp ,2]<= 10 )) # new cases in 5 to 10 age group
+  new_inc_11_15 <- length(which(OAE[tot_ind_ep_samp] == 1 & dat[tot_ind_ep_samp ,2] >= 10 & dat[tot_ind_ep_samp ,2]<= 15 )) # new cases in 10 to 15 age group
+
+  new_inc_M <- length(which(OAE[tot_ind_ep_samp] == 1 & dat[tot_ind_ep_samp ,3] == 1)) # new cases in males
+  new_inc_F <- length(which(OAE[tot_ind_ep_samp] == 1 & dat[tot_ind_ep_samp ,3] == 0)) # new cases in females
+
+  OAE_incidence_DT_under_5 <- c(OAE_incidence_DT_under_5, new_inc_under_5) # record & update incidence in under 5 age group
+  OAE_incidence_DT_5_10 <- c(OAE_incidence_DT_5_10, new_inc_5_10) # record & update incidence in 5 to 10 age group
+  OAE_incidence_DT_11_15 <- c(OAE_incidence_DT_11_15, new_inc_11_15) # record & update incidence in 10 to 15 age group
+
+  OAE_incidence_DT_M <- c(OAE_incidence_DT_M, new_inc_M) # record & update incidence in males
+  OAE_incidence_DT_F <- c(OAE_incidence_DT_F, new_inc_F) # record & update incidence in females
+
+  return(list(prev_OAE, OAE_incidence_DT, OAE_incidence_DT_under_5, OAE_incidence_DT_5_10, OAE_incidence_DT_11_15,
+              OAE_incidence_DT_F, OAE_incidence_DT_M,
+              OAE_rates, OAE, tested_OAE))
+
+}
+
+
+#### Current file: R/Intervention_functions.R
+
+#' @title
+#' Treat individuals function
+#' @description
+#' function to calculate which individuals will be treated.
+#'
+#' @param all.dt matrix containing (among other things) information on compliance to treatment (whether or not an individual can be treated) and the age of each individual.
+#' @param pncomp proportion non-compliers.
+#' @param covrg total coverage of the population.
+#' @param N human population size (default = 400).
+#'
+#' @return matrix of individuals to be treated (?)
+os.cov <- function(all.dt, pncomp, covrg, N)
+
+{
+  pop.ages <- all.dt[,2] #age of each individual in population
+
+  iny <- which(pop.ages < 5 | all.dt[,1] == 1)
+
+  nc.age <- length(iny) / length(pop.ages)
+
+  covrg <- covrg / (1 - nc.age) # probability a complying individual will be treated
+
+  out.cov <- rep(covrg, length(pop.ages))
+
+  out.cov[iny] <- 0 # non-compliers get probability 0
+
+  f.cov <- rep(0, N)
+
+  r.nums <- runif(N, 0, 1)
+
+  inds.c <- which(r.nums < out.cov)
+
+  f.cov[inds.c] <- 1
+
+  return(f.cov)
+
+}
+
+
+#### Current file: R/larval_dynamics_functions.R
+
+#' @title
+#' Density-dependence in vector
+#' @description
+#' proportion of mf per mg developing into infective larvae within the vector
+#' @param delta.vo density dependence when microfilarae tend to 0
+#' @param c.v severity of constraining density-dep larval development (per dermal mf)
+#' @param mf vector with total number of mf in each person (extracted from main matrix, summed over each mf age cat per individual)
+#' @param expos vector with total exposure (age/sex-specific and individual) per individual in population
+#'
+#' @returns vector for density-dependent (delat_V) value for each individual
+delta.v <- function(delta.vo, c.v, mf, expos)
+
+{
+  out <- delta.vo / (1 + c.v * mf *expos)
+
+  return(out)
+}
+
+
+#' @title
+#' calc.L1
+#' @description
+#' L1 (parasite life stages) dynamics in the fly population, assumed to be at equilibrium (modelled deterministically).
+#' @param beta per blackfly biting rate on humans (product of proportion of blackfly bites take on humans (h) & reciprocal of the duration of the gonotrophic cycle (g))
+#' @param mf vector with total number of mf in each person (extracted from main matrix, summed over each mf age cat per individual)
+#' @param mf.delay.in vector of ??
+#' @param expos vector with total exposure (age/sex-specific and individual) per individual in population
+#' @param delta.vo density dependence when microfilarae tend to 0
+#' @param c.v severity of constraining density-dep larval development (per dermal mf)
+#' @param nuone per-capita development rate from L1 to L2 larvae (default 201.6 year-1)
+#' @param mu.v per-capita mortality rate of blackfly vectors (default 26 year-1)
+#' @param a.v per-capita microfilaria-induced mortality of blackfly vectors (default 0.39 year-1)
+#' @param expos.delay vector of values from final (4th) column of matrix for exposure (to fly bites) (for L1 delay)exposure.delay) as each value for individual in population
+#'
+#' @returns vector of mean L1 per individual
+calc.L1 <- function(beta, mf, mf.delay.in, expos, delta.vo, c.v, nuone, mu.v, a.v, expos.delay)
+
+{
+  delta.vv <- delta.v(delta.vo, c.v, mf, expos)#density dependent establishment
+
+  out <- (delta.vv * beta * expos *  mf)  / ((mu.v + a.v * mf*expos) + (nuone * exp (-(4/366) * (mu.v + (a.v * mf.delay.in*expos.delay)))))
+
+  return(out)
+}
+
+
+#' @title
+#' calc.L2
+#' @description
+#' L2 (parasite life stages) dynamics in the fly population, assumed to be at equilibrium (modelled deterministically).
+#' delay of 4 days for parasites moving from L1 to L2
+#'
+#' @param nuone per-capita development rate from L1 to L2 larvae (default 201.6 year-1)
+#' @param L1.in vector of in initial L1 or L1 from last timestep
+#' @param mu.v per-capita mortality rate of blackfly vectors (default 26 year-1)
+#' @param nutwo per-capita development rate from L2 to L3 larvae (default 201.6 year-1)
+#' @param mf vector with delayed mf (?)
+#' @param a.v per-capita microfilaria-induced mortality of blackfly vectors (default 0.39 year-1)
+#' @param expos vector of values from final (4th) column of matrix for exposure (to fly bites) (for L1 delay)exposure.delay) as each value for individual in population
+#'
+#' @returns vector of mean L2 per individual
+calc.L2 <- function(nuone, L1.in, mu.v, nutwo, mf, a.v, expos)
+
+{
+  out <- (L1.in * (nuone * exp (-(4/366) * (mu.v + (a.v * mf * expos))))) / (mu.v + nutwo)
+
+  return(out)
+}
+
+
+#' @title
+#' calc.L3
+#' @description
+#' L3 (parasite life stages) dynamics in the fly population, assumed to be at equilibrium (modelled deterministically).
+#'
+#' @param nutwo per-capita development rate from L2 to L3 larvae (default 201.6 year-1)
+#' @param L2.in vector of L2 from main matrix for each individual
+#' @param a.H proportion of L3 shed per bite (on any blood host); default is 0.8
+#' @param g length of the gonotrophic cycle (0.0096)
+#' @param mu.v per-capita mortality rate of blackfly vectors (default 26 year-1)
+#' @param sigma.L0 per-capita mortality rate of L3 in blackfly vectors
+#'
+#' @returns vector of mean L3 per individual
+calc.L3 <- function(nutwo, L2.in, a.H, g, mu.v, sigma.L0)
+
+{
+  out <- (nutwo * L2.in) / ((a.H / g) + mu.v + sigma.L0)
+
+  return(out)
+}
+
+
+
+#### Current file: R/mf_dynamics_functions.R
+
+#' @title
+#' rotate matrix
+#' @description
+#' function to rotate matrix, used in mf function.
+#'
+#' @param x matrix to rotate.
+#'
+#' @returns rotated matrix (?)
+rotate <- function(x) {
+  x_rotated <- t(apply(x, 2, rev))
+
+  return(x_rotated)
+}
+
+
+#' @title
+#' change microfilariae number per human
+#' @description
+#' function calculates change in the number of microfilariae (mf) (offspring of adult worms) for each mf age compartment in each human using RK4 method
+#' this is called in ep.equi.sim for each mf age class.
+#' @param dat main matrix with mf inputs for each individual
+#' @param num.comps number of age classes in adult worms (fecundity rate is a function of adult worm age), default = 21 age classes (specified by c_max in Hamley et al. 2019).
+#' @param mf.cpt age class under consideration.
+#' @param num.mf.comps number of age classes in mf (same as adult worm), default = 21 age classes (specified by c_max in Hamley et al. 2019).
+#' @param ws column in main matrix where worm age compartments start for each individual (row in the main matrix).
+#' @param DT timestep
+#' @param time.each.comp duration fo each age class in mf (default value ins 0.125 year; q_M in Hamley et al. 2019).
+#' @param mu.rates.mf mf mortality rate (modelled as a weibull distribution, with mu.mf1 (y_M) and mu.mf2 (d_M) parameters) as a function of age.
+#' @param fec.rates fecundity rate in adult female worms (m(a) in Hamley et al. 2019); given by epsilon (1.158), fec.w.1 (F), fec.w.2 (fec.w.2).
+#' @param mf.move.rate determines mf aging (moving rate to the next age class); given by 1 / duration spent in each mf age class.
+#' @param up constant to allow for very large yet finite mf effect upon treatment (mu in Hamley et al. 2019; default value of 9.6 x 10-3) & determines extent of IVM induced mortality (with kap).
+#' @param kap shape parameter for excess mf mortality following IVM treatment (kappa in Hamley et al. 2019; default value of 1.25).
+#' @param iteration iteration moving through each timepoint (based on timestep).
+#' @param treat.vec vector contains how long since each person treated, mortality rate due to ivermectin decays with time since treatment.
+#' @param give.treat input (if 1 then treatment given).
+#' @param treat.start treatment start time.
+#'
+#' @returns vector for each individual in population (to replace specific mf age compartment column for all individuals in main matrix)
+change.micro <- function(dat, num.comps, mf.cpt, num.mf.comps, ws, DT, time.each.comp, mu.rates.mf, fec.rates, mf.move.rate,
+                         up, kap, iteration, treat.vec, give.treat, treat.start)
+
+{
+  N <- length(dat[,1])
+
+  # indexes for fertile worms (to use in production of mf)
+  fert.worms.start <-  ws + num.comps * 2
+  fert.worms.end <-  (ws - 1) + num.comps * 3
+
+  # indexes to check if there are males (males start is just 'ws')
+  # there must be >= 1 male worm for females to produce microfilariae
+  mal.worms.end <- (ws - 1) + num.comps
+  mf.mu <- rep(mu.rates.mf[mf.cpt], N)
+  fert.worms <- dat[, fert.worms.start:fert.worms.end] #number of fertile females worms
+
+  # increases microfilarial mortality if treatment has started
+  if(give.treat == 1 & iteration >= treat.start)
+  {
+    tao <- ((iteration - 1) * DT) - treat.vec # tao is zero if treatment has been given at this timestep
+
+    mu.mf.prime <- ((tao + up) ^ (- kap)) # additional mortality due to ivermectin treatment
+
+    mu.mf.prime[which(is.na(mu.mf.prime) == TRUE)] <- 0
+
+    mf.mu <- mf.mu + mu.mf.prime
+
+  }
+
+  # if the first age class of microfilariae
+  if(mf.cpt == 1)
+  {
+    mp <- rep(0, N)
+
+    inds.fec <- which(rowSums(dat[, ws : mal.worms.end]) > 0); mp[inds.fec] <- 1 # need to check there is more than one male
+
+    k1 <- derivmf.one(fert.worms = fert.worms, mf.in = dat[, 6 + mf.cpt], ep.in = fec.rates, mf.mort = mf.mu, mf.move = mf.move.rate, mp = mp, k.in = 0)  #fert worms and epin are vectors
+    k2 <- derivmf.one(fert.worms = fert.worms, mf.in = dat[, 6 + mf.cpt], ep.in = fec.rates, mf.mort = mf.mu, mf.move = mf.move.rate, mp = mp, k.in = DT*k1/2)
+    k3 <- derivmf.one(fert.worms = fert.worms, mf.in = dat[, 6 + mf.cpt], ep.in = fec.rates, mf.mort = mf.mu, mf.move = mf.move.rate, mp = mp, k.in = DT*k2/2)
+    k4 <- derivmf.one(fert.worms = fert.worms, mf.in = dat[, 6 + mf.cpt], ep.in = fec.rates, mf.mort = mf.mu, mf.move = mf.move.rate, mp = mp, k.in = DT*k3)
+
+    out <- dat[, 6 + mf.cpt] + DT/6 * (k1 + 2 * k2 + 2* k3 + k4)
+
+  }
+
+  # if age class of microfilariae is >1
+  if(mf.cpt > 1)
+  {
+    k1 <- derivmf.rest(mf.in = dat[, 6 + mf.cpt], mf.mort = mf.mu, mf.move = mf.move.rate, mf.comp.minus.one = dat[, 6 + mf.cpt - 1], k.in = 0)
+    k2 <- derivmf.rest(mf.in = dat[, 6 + mf.cpt], mf.mort = mf.mu, mf.move = mf.move.rate, mf.comp.minus.one = dat[, 6 + mf.cpt - 1], k.in = DT*k1/2)
+    k3 <- derivmf.rest(mf.in = dat[, 6 + mf.cpt], mf.mort = mf.mu, mf.move = mf.move.rate, mf.comp.minus.one = dat[, 6 + mf.cpt - 1], k.in = DT*k2/2)
+    k4 <- derivmf.rest(mf.in = dat[, 6 + mf.cpt], mf.mort = mf.mu, mf.move = mf.move.rate, mf.comp.minus.one = dat[, 6 + mf.cpt - 1], k.in = DT*k3)
+
+    out <- dat[, 6 + mf.cpt] + DT/6 * (k1 + 2 * k2 + 2 * k3 + k4)
+
+  }
+
+  return(out)
+}
+
+#' @title
+#' microfilariae age class 1 derivatives
+#' @description
+#' function called during RK4 for first age class of microfilariae (mf), which is a function of fertile adult female worms.
+#' @param fert.worms matrix (or vector?) of fertile females worms in all age-classes per individual.
+#' @param mf.in matrix of mf in first age-class per individual.
+#' @param ep.in fecundity of female worms (based on fec.rates in adult female worms (m(a) in Hamley et al. 2019))
+#' @param mf.mort mf.mu rate specified for first age class in each human
+#' @param mf.move determines mf aging (moving rate to the next age class).
+#' @param mp vector (?) length of human population
+#' @param k.in previous k (for k1 = 0) for RDK4 method.
+#'
+#' @returns vector for each individual
+derivmf.one <- function(fert.worms, mf.in, ep.in, mf.mort, mf.move, mp, k.in)  #fert worms and epin are vectors
+{
+  new.in <- (rotate(fert.worms) * ep.in) #need to rotate matrix to each column is multiplied by respective fecundity rate, not each row
+  new.in <- rotate(rotate(rotate(new.in)))
+  new.in <- rowSums(new.in)
+
+  mort.temp <- mf.mort * (mf.in + k.in)
+  move.temp <- mf.move * (mf.in + k.in)
+
+  mort.temp[which(mort.temp < 0)] <- 0
+  move.temp [which(move.temp < 0)] <- 0
+
+  if(length(which(mf.mort * (mf.in + k.in) < 0)) > 0) {print('MF NEGATIVE1')}
+  if(length(which(mf.move * (mf.in + k.in) < 0)) > 0) {print('MF NEGATIVE2')}
+
+
+  out <- mp * new.in - mort.temp - move.temp
+
+  return(out)
+}
+
+
+#' @title
+#' microfilariae age classes > 1 derivatives
+#' @description
+#' function called during RK4 for > 1 age classes of microfilariae (mf).
+#' @param mf.in matrix of mf in > 1 age classes per individual.
+#' @param mf.mort mf.mu rate specified for > 1 age classes in each human.
+#' @param mf.move determines mf aging (moving rate to the next age class).
+#' @param mf.comp.minus.one previous mf age class (compartment).
+#' @param k.in previous k (for k1 = 0) for RDK4 method.
+#'
+#' @returns vector for each individual
+derivmf.rest <- function(mf.in, mf.mort, mf.move, mf.comp.minus.one, k.in)
+{
+  move.last <- mf.comp.minus.one * mf.move
+  mort.temp <- mf.mort * (mf.in + k.in)
+  move.temp <- mf.move * (mf.in + k.in)
+
+  move.last[which(move.last < 0)] <- 0
+  mort.temp[which(mort.temp < 0)] <- 0
+  move.temp [which(move.temp < 0)] <- 0
+
+  if(length(which(mf.mort * (mf.in + k.in) < 0)) > 0) {print('WARNING MF NEGATIVE3')}
+  if(length(which(mf.move * (mf.in + k.in) < 0)) > 0) {print('WARNING MF NEGATIVE4')}
+
+
+  out <- move.last - mort.temp - move.temp
+
+  return(out)
+}
+
+
+#' @title
+#' calculate mf per skin snip
+#' @description
+#' function calculates number of mf in skin snip for all people.
+#' people are tested for the presence of mf using a skin snip, we assume mf are overdispersed in the skin.
+#' @param ss.wt weight of the skin snip
+#' @param num.ss number of skin snips taken (default set to 2)
+#' @param slope.kmf slope value governing linear relationship between degree of mf overdispersion and adult female worms
+#' @param int.kMf initial value governing linear relationship between degree of mf overdispersion and adult female worms
+#' @param data data is the matrix tracking age compartments of mf and W per individual
+#' @param nfw.start column (first age compartment) in matrix where non-fertile female worms begin
+#' @param fw.end column (last age compartment) in matrix where fertile female worms end
+#' @param mf.start column (first age compartment) in matrix where mf begin
+#' @param mf.end column (last age compartment) in matrix where mf ends
+#' @param pop.size human population size
+#' @param kM.const.toggle if set to YES then kM is a constant (default = 15)
+#'
+#' @returns element (1) in list is mean of mf per skin snip; element (2) contains all mf per skin snip for each individual
+mf.per.skin.snip <- function(ss.wt, num.ss, slope.kmf, int.kMf, data, nfw.start, fw.end,  ###check vectorization
+                             mf.start, mf.end, pop.size, kM.const.toggle)
+
+{
+
+  all.mfobs <- c()
+
+  if(isTRUE(kM.const.toggle)){
+    kmf <- 0 * (rowSums(data[,nfw.start:fw.end])) + 15}
+  else {
+     kmf <- slope.kmf * (rowSums(data[,nfw.start:fw.end])) + int.kMf #rowSums(da... sums up adult worms for all individuals giving a vector of kmfs
+  }
+
+  mfobs <- rnbinom(pop.size, size = kmf, mu = ss.wt * (rowSums(data[,mf.start:mf.end])))
+
+  nans <- which(mfobs == 'NaN'); mfobs[nans] <- 0
+
+  if(num.ss > 1)
+
+  {
+
+    tot.ss.mf <- matrix(, nrow = length(data[,1]), ncol = num.ss) # error?
+    tot.ss.mf[,1] <- mfobs
+
+    for(j in 2 : (num.ss)) #could be vectorized
+
+    {
+
+      temp <- rnbinom(pop.size, size = kmf, mu = ss.wt * (rowSums(data[,mf.start:mf.end])))
+
+      nans <- which(temp == 'NaN'); temp[nans] <- 0
+
+      tot.ss.mf[,j] <- temp
+
+    }
+
+    mfobs <- rowSums(tot.ss.mf)
+
+  }
+
+  mfobs <- mfobs / (ss.wt * num.ss)
+
+  list(mean(mfobs), mfobs)
+
+}
+
+#' @title
+#' mf prevalence
+#' @description
+#' calculates mf prevalence in people based on a skin snip
+#' @param age minimum age for giving a skin snip (therefore age from which prevalence calculated)
+#' @param ss.in takes mf per skin snip count object for each individual to convert to binary variable for prevalence
+#' @param main.dat main matrix contain age of each individual (to ensure only calculate prevalence based o age from which skin snips are taken)
+#'
+#' @returns value for prevalence
+prevalence.for.age <- function(age, ss.in, main.dat)
+
+{
+  inds <- which(main.dat[,2] >= age)
+
+  out <- length(which(ss.in[[2]][inds] > 0)) / length(inds)
+
+  return(out)
+}
+
+
+
+#' @title
+#' mf prevalence by strata
+#' @description
+#' calculates mf prevalence in people based on a skin snip for different population strata (age and sex)
+#' @param ss.in takes mf per skin snip count object for each individual to convert to binary variable for prevalence
+#' @param main.dat main matrix contain age of each individual (to ensure only calculate prevalence based o age from which skin snips are taken)
+#' @param lwr_age lower age to measure prevalence from
+#' @param upr_age lower age to measure prevalence to
+#' @param sex  sex of strata to measure prevalence in
+#'
+#' @returns value for prevalence
+prevalence.for.age_sex.strata <- function(ss.in, main.dat, lwr_age, upr_age, sex)
+
+{
+  if(sex == "male"){
+    sex_ind <- 1
+  } else {
+    sex_ind <- 0
+  }
+
+  inds <- which(main.dat[,2] >= lwr_age & main.dat[,2] < upr_age & main.dat[,3] == sex_ind)
+
+  out <- length(which(ss.in[[2]][inds] > 0)) / length(inds)
+
+  return(out)
+}
+
+
+#' @title
+#' mf prevalence by strata (including compliance)
+#' @description
+#' calculates mf prevalence in people based on a skin snip for different population strata (age, sex and compliance)
+#' @param ss.in takes mf per skin snip count object for each individual to convert to binary variable for prevalence
+#' @param main.dat main matrix contain age of each individual (to ensure only calculate prevalence based o age from which skin snips are taken)
+#' @param lwr_age lower age to measure prevalence from
+#' @param upr_age lower age to measure prevalence to
+#' @param sex  sex of strata to measure prevalence in
+#'
+#' @returns value for prevalence
+prevalence.for.age_sex_compl.strata <- function(ss.in, main.dat, lwr_age, upr_age, sex, compliance)
+
+{
+  if(sex == "male"){
+    sex_ind <- 1
+  } else {
+    sex_ind <- 0
+  }
+
+  inds <- which(main.dat[,2] >= lwr_age & main.dat[,2] < upr_age)
+
+  out <- length(which(ss.in[[2]][inds] > 0)) / length(inds)
+
+  return(out)
+}
+
+
+
+
+
+#### Current file: R/Model_wrappers.R
 
 #EPIONCHO-IBM
 #30/04/2020
@@ -172,7 +1070,7 @@ ep.equi.sim <- function(time.its,
     #times.of.treat.in <- seq(treat.start, treat.stop - (treat.int / DT), treat.int / DT)
     if(all(!is.na(treat.timing))) {treat.timing <- treat.timing + ((treat.start - 367)/ 366)}
     if(all(is.na(treat.timing)))
-    {times.of.treat.in <- seq(treat.start, treat.stop, treat.int / DT)}
+      {times.of.treat.in <- seq(treat.start, treat.stop, treat.int / DT)}
     else {times.of.treat.in <- round((treat.timing) / (DT)) + 1}
 
     print(paste(length(times.of.treat.in), 'MDA rounds to be given', sep = ' '))
@@ -432,6 +1330,8 @@ ep.equi.sim <- function(time.its,
 
   if(calc_ov16) {
     Ov16_Seropositive <- rep(0, N)
+    Ov16_Seropositive_l3_estab <- rep(0, N)
+    Ov16_Seropositive_juvy_adult <- rep(0, N)
     mf_indv_prev <- rep(0, N)
 
     # 80% of pop is able to mount Antibody response to Ov16
@@ -463,6 +1363,8 @@ ep.equi.sim <- function(time.its,
 
       all.mats.temp_pre_treat <- all.mats.temp
       Ov16_Seropositive_pre_treat <- Ov16_Seropositive
+      Ov16_Seropositive_l3_estab_pre_treat <- Ov16_Seropositive_l3_estab
+      Ov16_Seropositive_juvy_adult_pre_treat <- Ov16_Seropositive_juvy_adult
       mf_indv_prev_pre_treat <- mf_indv_prev
 
     }
@@ -549,9 +1451,9 @@ ep.equi.sim <- function(time.its,
 
       if (i >= vc.iter.strt && i < vc.iter.stp) {
 
-        ABR_updated <- ABR - (ABR * vector.control.efficacy) # proportional reduction in ABR (x efficacy) during VC
+      ABR_updated <- ABR - (ABR * vector.control.efficacy) # proportional reduction in ABR (x efficacy) during VC
 
-        m = ABR_updated * ((1/104) / 0.63) # update m
+      m = ABR_updated * ((1/104) / 0.63) # update m
       }
     }
 
@@ -560,7 +1462,7 @@ ep.equi.sim <- function(time.its,
 
       ABR_upd <- ABR_updated
 
-    } else {
+      } else {
 
       ABR_upd <- ABR
     }
@@ -584,19 +1486,19 @@ ep.equi.sim <- function(time.its,
       if(k == 1) {from.last <- rep(0, N)} #create vector for worms coming from previous compartment (needs to be 0 when k ==1)
 
 
-      res.w1 <- change.worm.per.ind1(treat.vec = treat.vec.in, lambda.zero = lambda.zero, DT = DT, omeg = omeg,
-                                     ws = worms.start, compartment = k, total.dat = all.mats.cur, mort.rates = mort.rates.worms,
-                                     time.each.comp = time.each.comp.worms, new.worms.m = new.worms.m, w.f.l.c = from.last,
-                                     num.comps = num.comps.worm)
+       res.w1 <- change.worm.per.ind1(treat.vec = treat.vec.in, lambda.zero = lambda.zero, DT = DT, omeg = omeg,
+                                      ws = worms.start, compartment = k, total.dat = all.mats.cur, mort.rates = mort.rates.worms,
+                                      time.each.comp = time.each.comp.worms, new.worms.m = new.worms.m, w.f.l.c = from.last,
+                                      num.comps = num.comps.worm)
 
-      res.w.treat <- change.worm.per.ind.treat(give.treat = give.treat, iteration = i, treat.start = treat.start, times.of.treat = times.of.treat.in, treat.stop = treat.stop,
-                                               onchosim.cov = cov.in, treat.vec = treat.vec.in, DT = DT, cum.infer = cum.infer, lam.m = lam.m, phi = phi, N = res.w1[[3]],
-                                               mort.fems = res.w1[[2]], lambda.zero.in = res.w1[[1]])
+       res.w.treat <- change.worm.per.ind.treat(give.treat = give.treat, iteration = i, treat.start = treat.start, times.of.treat = times.of.treat.in, treat.stop = treat.stop,
+                                      onchosim.cov = cov.in, treat.vec = treat.vec.in, DT = DT, cum.infer = cum.infer, lam.m = lam.m, phi = phi, N = res.w1[[3]],
+                                      mort.fems = res.w1[[2]], lambda.zero.in = res.w1[[1]])
 
-      res.w2 <- change.worm.per.ind2(DT = DT, time.each.comp = time.each.comp.worms, compartment = k, new.worms.nf.fo = new.worms.nf, w.f.l.c = from.last,
-                                     N = res.w1[[3]], cur.Wm.nf = res.w1[[4]], mort.fems = res.w.treat[[3]], cur.Wm.f = res.w1[[5]], omeg = res.w1[[7]],
-                                     male.tot.worms = res.w1[[8]], worm.loss.males = res.w1[[9]],
-                                     lambda.zero.in = res.w.treat[[1]], treat.vec = res.w.treat[[2]])
+       res.w2 <- change.worm.per.ind2(DT = DT, time.each.comp = time.each.comp.worms, compartment = k, new.worms.nf.fo = new.worms.nf, w.f.l.c = from.last,
+                                      N = res.w1[[3]], cur.Wm.nf = res.w1[[4]], mort.fems = res.w.treat[[3]], cur.Wm.f = res.w1[[5]], omeg = res.w1[[7]],
+                                      male.tot.worms = res.w1[[8]], worm.loss.males = res.w1[[9]],
+                                      lambda.zero.in = res.w.treat[[1]], treat.vec = res.w.treat[[2]])
 
 
       res <- res.w2 # (matt: re-label the final result output to res so do not have to change res below)
@@ -663,13 +1565,13 @@ ep.equi.sim <- function(time.its,
       if(i == 1){
 
         OAE_out1 <- find_indiv_OAE_func(dat = all.mats.temp, mf.start = mf.start, mf.end = mf.end, worms.start = worms.start, nfw.start = nfw.start, fw.end = fw.end,
-                                        infected_at_all = infected_at_all, age_to_samp = age_to_samp, OAE = OAE, tested_OAE = tested_OAE, check_ind = check_ind) # step 1
+                          infected_at_all = infected_at_all, age_to_samp = age_to_samp, OAE = OAE, tested_OAE = tested_OAE, check_ind = check_ind) # step 1
 
         infected_at_all = OAE_out1[[2]] # updated (when i = 1)
         check_ind = OAE_out1[[3]] # updated (when i = 1)
 
         temp.mf <- mf.per.skin.snip(ss.wt = 2, num.ss = 2, slope.kmf = 0.0478, int.kMf = 0.313, data = all.mats.temp, nfw.start, fw.end,
-                                    mf.start, mf.end, pop.size = N, kM.const.toggle)
+                                mf.start, mf.end, pop.size = N, kM.const.toggle)
 
         OAE_out2 <- new_OAE_cases_func(temp.mf = temp.mf, tot_ind_ep_samp = OAE_out1[[1]], OAE_probs = OAE_probs, dat = all.mats.temp,
                                        OAE = OAE, tested_OAE = tested_OAE,
@@ -718,11 +1620,19 @@ ep.equi.sim <- function(time.its,
 
     #ov16_sero
     if(calc_ov16) {
-      indv_L3 <- all.mats.temp[, 6]
+      indv_L3_exp <- l.extras[,1]
+      indv_estab <- l.extras[,length(l.extras[1,])]
+      indv_juvy_adult <- l.extras[,1]
       indv_antib <- all.mats.temp[,num.cols+ov16.col]
 
-      new_inf_Ov16 <- which(indv_L3 > 0 & Ov16_Seropositive == 0 & indv_antib == 1)
+      new_inf_Ov16 <- which(indv_L3_exp > 0 & Ov16_Seropositive == 0 & indv_antib == 1)
       Ov16_Seropositive[new_inf_Ov16] <- 1
+
+      new_inf_Ov16_estab <- which(indv_estab > 0 & Ov16_Seropositive_l3_estab == 0 & indv_antib == 1)
+      Ov16_Seropositive_l3_estab[new_inf_Ov16_estab] <- 1
+
+      new_inf_Ov16_juvy <- which(indv_juvy_adult > 0 & Ov16_Seropositive_juvy_adult == 0 & indv_antib == 1)
+      Ov16_Seropositive_juvy_adult[new_inf_Ov16_juvy] <- 1
 
       mf_indv_prev <- as.integer(temp.mf[[2]] > 0)
       prev_Ov16 <- c(prev_Ov16, sum(Ov16_Seropositive)/N)
@@ -754,6 +1664,8 @@ ep.equi.sim <- function(time.its,
 
       if(calc_ov16) {
         Ov16_Seropositive[to.die] <- 0
+        Ov16_Seropositive_l3_estab[to.die] <- 0
+        Ov16_Seropositive_juvy_adult[to.die] <- 0
         mf_indv_prev[to.die] <- 0
       }
 
@@ -793,10 +1705,10 @@ ep.equi.sim <- function(time.its,
                     ABR_recorded, coverage.recorded))
 
       names(outp) <- c('mf_prev', 'mf_intens', 'L3', 'all_equilibrium_outputs', 'OAE_prev','OAE_incidence',
-                       'OAE_incidence_under_5yrs','OAE_incidence_5_10yrs','OAE_incidence_10_15yrs',
-                       'OAE_incidence_males','OAE_incidence_females','all_OAE_equilibirum_ouputs',
-                       'ABR_recorded', 'coverage.recorded')
-      return(outp)
+                     'OAE_incidence_under_5yrs','OAE_incidence_5_10yrs','OAE_incidence_10_15yrs',
+                     'OAE_incidence_males','OAE_incidence_females','all_OAE_equilibirum_ouputs',
+                     'ABR_recorded', 'coverage.recorded')
+    return(outp)
     }
 
     if(isFALSE(run_equilibrium))
@@ -836,8 +1748,8 @@ ep.equi.sim <- function(time.its,
       outp <- list(prev, mean.mf.per.snip, L3_vec, ABR, all.mats.temp, ABR_recorded, coverage.recorded)
       names(outp) <-  c('mf_prev', 'mf_intens', 'L3', 'ABR', 'all_infection_burdens', 'ABR_recorded', 'coverage.recorded')
       if(calc_ov16) {
-        ov16_output <- list(Ov16_Seropositive, mf_indv_prev, Ov16_Seropositive_pre_treat, mf_indv_prev_pre_treat, all.mats.temp_pre_treat)
-        names(ov16_output) <- c('ov16_seropositive', 'mf_indv_prevalence', 'ov16_seropositive_pre_treatment', 'mf_indv_prevalence_pre_treatment', 'all_infection_burdens_pre_treatment')
+        ov16_output <- list(Ov16_Seropositive, Ov16_Seropositive_l3_estab, Ov16_Seropositive_juvy_adult, mf_indv_prev, Ov16_Seropositive_pre_treat, Ov16_Seropositive_l3_estab_pre_treat, Ov16_Seropositive_juvy_adult_pre_treat, mf_indv_prev_pre_treat, all.mats.temp_pre_treat)
+        names(ov16_output) <- c('ov16_seropositive', 'ov16_seropositive_l3_estab', 'ov16_seropositive_juvy_adult', 'mf_indv_prevalence', 'ov16_seropositive_pre_treatment', 'ov16_seropositive_l3_estab_pre_treatment', 'ov16_seropositive_juvy_adult_pre_treatment', 'mf_indv_prevalence_pre_treatment', 'all_infection_burdens_pre_treatment')
         outp <- append(outp, ov16_output)
       }
       return(outp)
@@ -847,904 +1759,16 @@ ep.equi.sim <- function(time.its,
 
 }
 
-# mf_dynamics_functions
 
-#' @title
-#' rotate matrix
-#' @description
-#' function to rotate matrix, used in mf function.
-#'
-#' @param x matrix to rotate.
-#'
-#' @returns rotated matrix (?)
-rotate <- function(x) {
-  x_rotated <- t(apply(x, 2, rev))
+#### Current file: runModelRCS.R
 
-  return(x_rotated)
-}
+library(dplyr)
 
-
-#' @title
-#' change microfilariae number per human
-#' @description
-#' function calculates change in the number of microfilariae (mf) (offspring of adult worms) for each mf age compartment in each human using RK4 method
-#' this is called in ep.equi.sim for each mf age class.
-#' @param dat main matrix with mf inputs for each individual
-#' @param num.comps number of age classes in adult worms (fecundity rate is a function of adult worm age), default = 21 age classes (specified by c_max in Hamley et al. 2019).
-#' @param mf.cpt age class under consideration.
-#' @param num.mf.comps number of age classes in mf (same as adult worm), default = 21 age classes (specified by c_max in Hamley et al. 2019).
-#' @param ws column in main matrix where worm age compartments start for each individual (row in the main matrix).
-#' @param DT timestep
-#' @param time.each.comp duration fo each age class in mf (default value ins 0.125 year; q_M in Hamley et al. 2019).
-#' @param mu.rates.mf mf mortality rate (modelled as a weibull distribution, with mu.mf1 (y_M) and mu.mf2 (d_M) parameters) as a function of age.
-#' @param fec.rates fecundity rate in adult female worms (m(a) in Hamley et al. 2019); given by epsilon (1.158), fec.w.1 (F), fec.w.2 (fec.w.2).
-#' @param mf.move.rate determines mf aging (moving rate to the next age class); given by 1 / duration spent in each mf age class.
-#' @param up constant to allow for very large yet finite mf effect upon treatment (mu in Hamley et al. 2019; default value of 9.6 x 10-3) & determines extent of IVM induced mortality (with kap).
-#' @param kap shape parameter for excess mf mortality following IVM treatment (kappa in Hamley et al. 2019; default value of 1.25).
-#' @param iteration iteration moving through each timepoint (based on timestep).
-#' @param treat.vec vector contains how long since each person treated, mortality rate due to ivermectin decays with time since treatment.
-#' @param give.treat input (if 1 then treatment given).
-#' @param treat.start treatment start time.
-#'
-#' @returns vector for each individual in population (to replace specific mf age compartment column for all individuals in main matrix)
-change.micro <- function(dat, num.comps, mf.cpt, num.mf.comps, ws, DT, time.each.comp, mu.rates.mf, fec.rates, mf.move.rate,
-                         up, kap, iteration, treat.vec, give.treat, treat.start)
-
-{
-  N <- length(dat[,1])
-
-  # indexes for fertile worms (to use in production of mf)
-  fert.worms.start <-  ws + num.comps * 2
-  fert.worms.end <-  (ws - 1) + num.comps * 3
-
-  # indexes to check if there are males (males start is just 'ws')
-  # there must be >= 1 male worm for females to produce microfilariae
-  mal.worms.end <- (ws - 1) + num.comps
-  mf.mu <- rep(mu.rates.mf[mf.cpt], N)
-  fert.worms <- dat[, fert.worms.start:fert.worms.end] #number of fertile females worms
-
-  # increases microfilarial mortality if treatment has started
-  if(give.treat == 1 & iteration >= treat.start)
-  {
-    tao <- ((iteration - 1) * DT) - treat.vec # tao is zero if treatment has been given at this timestep
-
-    mu.mf.prime <- ((tao + up) ^ (- kap)) # additional mortality due to ivermectin treatment
-
-    mu.mf.prime[which(is.na(mu.mf.prime) == TRUE)] <- 0
-
-    mf.mu <- mf.mu + mu.mf.prime
-
-  }
-
-  # if the first age class of microfilariae
-  if(mf.cpt == 1)
-  {
-    mp <- rep(0, N)
-
-    inds.fec <- which(rowSums(dat[, ws : mal.worms.end]) > 0); mp[inds.fec] <- 1 # need to check there is more than one male
-
-    k1 <- derivmf.one(fert.worms = fert.worms, mf.in = dat[, 6 + mf.cpt], ep.in = fec.rates, mf.mort = mf.mu, mf.move = mf.move.rate, mp = mp, k.in = 0)  #fert worms and epin are vectors
-    k2 <- derivmf.one(fert.worms = fert.worms, mf.in = dat[, 6 + mf.cpt], ep.in = fec.rates, mf.mort = mf.mu, mf.move = mf.move.rate, mp = mp, k.in = DT*k1/2)
-    k3 <- derivmf.one(fert.worms = fert.worms, mf.in = dat[, 6 + mf.cpt], ep.in = fec.rates, mf.mort = mf.mu, mf.move = mf.move.rate, mp = mp, k.in = DT*k2/2)
-    k4 <- derivmf.one(fert.worms = fert.worms, mf.in = dat[, 6 + mf.cpt], ep.in = fec.rates, mf.mort = mf.mu, mf.move = mf.move.rate, mp = mp, k.in = DT*k3)
-
-    out <- dat[, 6 + mf.cpt] + DT/6 * (k1 + 2 * k2 + 2* k3 + k4)
-
-  }
-
-  # if age class of microfilariae is >1
-  if(mf.cpt > 1)
-  {
-    k1 <- derivmf.rest(mf.in = dat[, 6 + mf.cpt], mf.mort = mf.mu, mf.move = mf.move.rate, mf.comp.minus.one = dat[, 6 + mf.cpt - 1], k.in = 0)
-    k2 <- derivmf.rest(mf.in = dat[, 6 + mf.cpt], mf.mort = mf.mu, mf.move = mf.move.rate, mf.comp.minus.one = dat[, 6 + mf.cpt - 1], k.in = DT*k1/2)
-    k3 <- derivmf.rest(mf.in = dat[, 6 + mf.cpt], mf.mort = mf.mu, mf.move = mf.move.rate, mf.comp.minus.one = dat[, 6 + mf.cpt - 1], k.in = DT*k2/2)
-    k4 <- derivmf.rest(mf.in = dat[, 6 + mf.cpt], mf.mort = mf.mu, mf.move = mf.move.rate, mf.comp.minus.one = dat[, 6 + mf.cpt - 1], k.in = DT*k3)
-
-    out <- dat[, 6 + mf.cpt] + DT/6 * (k1 + 2 * k2 + 2 * k3 + k4)
-
-  }
-
-  return(out)
-}
-
-#' @title
-#' microfilariae age class 1 derivatives
-#' @description
-#' function called during RK4 for first age class of microfilariae (mf), which is a function of fertile adult female worms.
-#' @param fert.worms matrix (or vector?) of fertile females worms in all age-classes per individual.
-#' @param mf.in matrix of mf in first age-class per individual.
-#' @param ep.in fecundity of female worms (based on fec.rates in adult female worms (m(a) in Hamley et al. 2019))
-#' @param mf.mort mf.mu rate specified for first age class in each human
-#' @param mf.move determines mf aging (moving rate to the next age class).
-#' @param mp vector (?) length of human population
-#' @param k.in previous k (for k1 = 0) for RDK4 method.
-#'
-#' @returns vector for each individual
-derivmf.one <- function(fert.worms, mf.in, ep.in, mf.mort, mf.move, mp, k.in)  #fert worms and epin are vectors
-{
-  new.in <- (rotate(fert.worms) * ep.in) #need to rotate matrix to each column is multiplied by respective fecundity rate, not each row
-  new.in <- rotate(rotate(rotate(new.in)))
-  new.in <- rowSums(new.in)
-
-  mort.temp <- mf.mort * (mf.in + k.in)
-  move.temp <- mf.move * (mf.in + k.in)
-
-  mort.temp[which(mort.temp < 0)] <- 0
-  move.temp [which(move.temp < 0)] <- 0
-
-  if(length(which(mf.mort * (mf.in + k.in) < 0)) > 0) {print('MF NEGATIVE1')}
-  if(length(which(mf.move * (mf.in + k.in) < 0)) > 0) {print('MF NEGATIVE2')}
-
-
-  out <- mp * new.in - mort.temp - move.temp
-
-  return(out)
-}
-
-
-#' @title
-#' microfilariae age classes > 1 derivatives
-#' @description
-#' function called during RK4 for > 1 age classes of microfilariae (mf).
-#' @param mf.in matrix of mf in > 1 age classes per individual.
-#' @param mf.mort mf.mu rate specified for > 1 age classes in each human.
-#' @param mf.move determines mf aging (moving rate to the next age class).
-#' @param mf.comp.minus.one previous mf age class (compartment).
-#' @param k.in previous k (for k1 = 0) for RDK4 method.
-#'
-#' @returns vector for each individual
-derivmf.rest <- function(mf.in, mf.mort, mf.move, mf.comp.minus.one, k.in)
-{
-  move.last <- mf.comp.minus.one * mf.move
-  mort.temp <- mf.mort * (mf.in + k.in)
-  move.temp <- mf.move * (mf.in + k.in)
-
-  move.last[which(move.last < 0)] <- 0
-  mort.temp[which(mort.temp < 0)] <- 0
-  move.temp [which(move.temp < 0)] <- 0
-
-  if(length(which(mf.mort * (mf.in + k.in) < 0)) > 0) {print('WARNING MF NEGATIVE3')}
-  if(length(which(mf.move * (mf.in + k.in) < 0)) > 0) {print('WARNING MF NEGATIVE4')}
-
-
-  out <- move.last - mort.temp - move.temp
-
-  return(out)
-}
-
-
-#' @title
-#' calculate mf per skin snip
-#' @description
-#' function calculates number of mf in skin snip for all people.
-#' people are tested for the presence of mf using a skin snip, we assume mf are overdispersed in the skin.
-#' @param ss.wt weight of the skin snip
-#' @param num.ss number of skin snips taken (default set to 2)
-#' @param slope.kmf slope value governing linear relationship between degree of mf overdispersion and adult female worms
-#' @param int.kMf initial value governing linear relationship between degree of mf overdispersion and adult female worms
-#' @param data data is the matrix tracking age compartments of mf and W per individual
-#' @param nfw.start column (first age compartment) in matrix where non-fertile female worms begin
-#' @param fw.end column (last age compartment) in matrix where fertile female worms end
-#' @param mf.start column (first age compartment) in matrix where mf begin
-#' @param mf.end column (last age compartment) in matrix where mf ends
-#' @param pop.size human population size
-#' @param kM.const.toggle if set to YES then kM is a constant (default = 15)
-#'
-#' @returns element (1) in list is mean of mf per skin snip; element (2) contains all mf per skin snip for each individual
-mf.per.skin.snip <- function(ss.wt, num.ss, slope.kmf, int.kMf, data, nfw.start, fw.end,  ###check vectorization
-                             mf.start, mf.end, pop.size, kM.const.toggle)
-
-{
-
-  all.mfobs <- c()
-
-  if(isTRUE(kM.const.toggle)){
-    kmf <- 0 * (rowSums(data[,nfw.start:fw.end])) + 15}
-  else {
-    kmf <- slope.kmf * (rowSums(data[,nfw.start:fw.end])) + int.kMf #rowSums(da... sums up adult worms for all individuals giving a vector of kmfs
-  }
-
-  mfobs <- rnbinom(pop.size, size = kmf, mu = ss.wt * (rowSums(data[,mf.start:mf.end])))
-
-  nans <- which(mfobs == 'NaN'); mfobs[nans] <- 0
-
-  if(num.ss > 1)
-
-  {
-
-    tot.ss.mf <- matrix(, nrow = length(data[,1]), ncol = num.ss) # error?
-    tot.ss.mf[,1] <- mfobs
-
-    for(j in 2 : (num.ss)) #could be vectorized
-
-    {
-
-      temp <- rnbinom(pop.size, size = kmf, mu = ss.wt * (rowSums(data[,mf.start:mf.end])))
-
-      nans <- which(temp == 'NaN'); temp[nans] <- 0
-
-      tot.ss.mf[,j] <- temp
-
-    }
-
-    mfobs <- rowSums(tot.ss.mf)
-
-  }
-
-  mfobs <- mfobs / (ss.wt * num.ss)
-
-  list(mean(mfobs), mfobs)
-
-}
-
-#' @title
-#' mf prevalence
-#' @description
-#' calculates mf prevalence in people based on a skin snip
-#' @param age minimum age for giving a skin snip (therefore age from which prevalence calculated)
-#' @param ss.in takes mf per skin snip count object for each individual to convert to binary variable for prevalence
-#' @param main.dat main matrix contain age of each individual (to ensure only calculate prevalence based o age from which skin snips are taken)
-#'
-#' @returns value for prevalence
-prevalence.for.age <- function(age, ss.in, main.dat)
-
-{
-  inds <- which(main.dat[,2] >= age)
-
-  out <- length(which(ss.in[[2]][inds] > 0)) / length(inds)
-
-  return(out)
-}
-
-
-
-#' @title
-#' mf prevalence by strata
-#' @description
-#' calculates mf prevalence in people based on a skin snip for different population strata (age and sex)
-#' @param ss.in takes mf per skin snip count object for each individual to convert to binary variable for prevalence
-#' @param main.dat main matrix contain age of each individual (to ensure only calculate prevalence based o age from which skin snips are taken)
-#' @param lwr_age lower age to measure prevalence from
-#' @param upr_age lower age to measure prevalence to
-#' @param sex  sex of strata to measure prevalence in
-#'
-#' @returns value for prevalence
-prevalence.for.age_sex.strata <- function(ss.in, main.dat, lwr_age, upr_age, sex)
-
-{
-  if(sex == "male"){
-    sex_ind <- 1
-  } else {
-    sex_ind <- 0
-  }
-
-  inds <- which(main.dat[,2] >= lwr_age & main.dat[,2] < upr_age & main.dat[,3] == sex_ind)
-
-  out <- length(which(ss.in[[2]][inds] > 0)) / length(inds)
-
-  return(out)
-}
-
-
-#' @title
-#' mf prevalence by strata (including compliance)
-#' @description
-#' calculates mf prevalence in people based on a skin snip for different population strata (age, sex and compliance)
-#' @param ss.in takes mf per skin snip count object for each individual to convert to binary variable for prevalence
-#' @param main.dat main matrix contain age of each individual (to ensure only calculate prevalence based o age from which skin snips are taken)
-#' @param lwr_age lower age to measure prevalence from
-#' @param upr_age lower age to measure prevalence to
-#' @param sex  sex of strata to measure prevalence in
-#'
-#' @returns value for prevalence
-prevalence.for.age_sex_compl.strata <- function(ss.in, main.dat, lwr_age, upr_age, sex, compliance)
-
-{
-  if(sex == "male"){
-    sex_ind <- 1
-  } else {
-    sex_ind <- 0
-  }
-
-  inds <- which(main.dat[,2] >= lwr_age & main.dat[,2] < upr_age)
-
-  out <- length(which(ss.in[[2]][inds] > 0)) / length(inds)
-
-  return(out)
-}
-
-# larval_dynamics_functions
-
-#' @title
-#' Density-dependence in vector
-#' @description
-#' proportion of mf per mg developing into infective larvae within the vector
-#' @param delta.vo density dependence when microfilarae tend to 0
-#' @param c.v severity of constraining density-dep larval development (per dermal mf)
-#' @param mf vector with total number of mf in each person (extracted from main matrix, summed over each mf age cat per individual)
-#' @param expos vector with total exposure (age/sex-specific and individual) per individual in population
-#'
-#' @returns vector for density-dependent (delat_V) value for each individual
-delta.v <- function(delta.vo, c.v, mf, expos)
-
-{
-  out <- delta.vo / (1 + c.v * mf *expos)
-
-  return(out)
-}
-
-
-#' @title
-#' calc.L1
-#' @description
-#' L1 (parasite life stages) dynamics in the fly population, assumed to be at equilibrium (modelled deterministically).
-#' @param beta per blackfly biting rate on humans (product of proportion of blackfly bites take on humans (h) & reciprocal of the duration of the gonotrophic cycle (g))
-#' @param mf vector with total number of mf in each person (extracted from main matrix, summed over each mf age cat per individual)
-#' @param mf.delay.in vector of ??
-#' @param expos vector with total exposure (age/sex-specific and individual) per individual in population
-#' @param delta.vo density dependence when microfilarae tend to 0
-#' @param c.v severity of constraining density-dep larval development (per dermal mf)
-#' @param nuone per-capita development rate from L1 to L2 larvae (default 201.6 year-1)
-#' @param mu.v per-capita mortality rate of blackfly vectors (default 26 year-1)
-#' @param a.v per-capita microfilaria-induced mortality of blackfly vectors (default 0.39 year-1)
-#' @param expos.delay vector of values from final (4th) column of matrix for exposure (to fly bites) (for L1 delay)exposure.delay) as each value for individual in population
-#'
-#' @returns vector of mean L1 per individual
-calc.L1 <- function(beta, mf, mf.delay.in, expos, delta.vo, c.v, nuone, mu.v, a.v, expos.delay)
-
-{
-  delta.vv <- delta.v(delta.vo, c.v, mf, expos)#density dependent establishment
-
-  out <- (delta.vv * beta * expos *  mf)  / ((mu.v + a.v * mf*expos) + (nuone * exp (-(4/366) * (mu.v + (a.v * mf.delay.in*expos.delay)))))
-
-  return(out)
-}
-
-
-#' @title
-#' calc.L2
-#' @description
-#' L2 (parasite life stages) dynamics in the fly population, assumed to be at equilibrium (modelled deterministically).
-#' delay of 4 days for parasites moving from L1 to L2
-#'
-#' @param nuone per-capita development rate from L1 to L2 larvae (default 201.6 year-1)
-#' @param L1.in vector of in initial L1 or L1 from last timestep
-#' @param mu.v per-capita mortality rate of blackfly vectors (default 26 year-1)
-#' @param nutwo per-capita development rate from L2 to L3 larvae (default 201.6 year-1)
-#' @param mf vector with delayed mf (?)
-#' @param a.v per-capita microfilaria-induced mortality of blackfly vectors (default 0.39 year-1)
-#' @param expos vector of values from final (4th) column of matrix for exposure (to fly bites) (for L1 delay)exposure.delay) as each value for individual in population
-#'
-#' @returns vector of mean L2 per individual
-calc.L2 <- function(nuone, L1.in, mu.v, nutwo, mf, a.v, expos)
-
-{
-  out <- (L1.in * (nuone * exp (-(4/366) * (mu.v + (a.v * mf * expos))))) / (mu.v + nutwo)
-
-  return(out)
-}
-
-
-#' @title
-#' calc.L3
-#' @description
-#' L3 (parasite life stages) dynamics in the fly population, assumed to be at equilibrium (modelled deterministically).
-#'
-#' @param nutwo per-capita development rate from L2 to L3 larvae (default 201.6 year-1)
-#' @param L2.in vector of L2 from main matrix for each individual
-#' @param a.H proportion of L3 shed per bite (on any blood host); default is 0.8
-#' @param g length of the gonotrophic cycle (0.0096)
-#' @param mu.v per-capita mortality rate of blackfly vectors (default 26 year-1)
-#' @param sigma.L0 per-capita mortality rate of L3 in blackfly vectors
-#'
-#' @returns vector of mean L3 per individual
-calc.L3 <- function(nutwo, L2.in, a.H, g, mu.v, sigma.L0)
-
-{
-  out <- (nutwo * L2.in) / ((a.H / g) + mu.v + sigma.L0)
-
-  return(out)
-}
-
-# intervention functions
-
-#' @title
-#' Treat individuals function
-#' @description
-#' function to calculate which individuals will be treated.
-#'
-#' @param all.dt matrix containing (among other things) information on compliance to treatment (whether or not an individual can be treated) and the age of each individual.
-#' @param pncomp proportion non-compliers.
-#' @param covrg total coverage of the population.
-#' @param N human population size (default = 400).
-#'
-#' @return matrix of individuals to be treated (?)
-os.cov <- function(all.dt, pncomp, covrg, N)
-
-{
-  pop.ages <- all.dt[,2] #age of each individual in population
-
-  iny <- which(pop.ages < 5 | all.dt[,1] == 1)
-
-  nc.age <- length(iny) / length(pop.ages)
-
-  covrg <- covrg / (1 - nc.age) # probability a complying individual will be treated
-
-  out.cov <- rep(covrg, length(pop.ages))
-
-  out.cov[iny] <- 0 # non-compliers get probability 0
-
-  f.cov <- rep(0, N)
-
-  r.nums <- runif(N, 0, 1)
-
-  inds.c <- which(r.nums < out.cov)
-
-  f.cov[inds.c] <- 1
-
-  return(f.cov)
-
-}
-
-# epilepsy model functions
-
-#' @title
-#' OAE probability function
-#' @description
-#' calculate onchocerciasis-associated epilepsy (OAE) probabilities for mean mf counts
-#'
-#' @param dat this is the data from Chesnais et al. 2018 with OAE probabilities for 7 mean mf loads in Cameroon
-#'
-#' @returns vector of OAE probabilities for mf counts from 0 to 1000
-OAE_mfcount_prob_func <- function(dat){
-
-  # ep_mfcount_prob_df <- data.frame(prob = c(0.0061, 0.0439, 0.0720, 0.0849, 0.1341, 0.1538, 0.20),
-  #                                  mf = c(0, 3, 13, 36, 76, 151, 200)) # data from Chesnais et al. 2018
-
-
-  fit <- glm(prob ~ log(mf + 1), family = gaussian(link = "log"),
-             data = dat) # fitted logarithmic relationship between prob OAE ~ mean mf load;
-  # generalized linear model with log-link function
-
-  newdat <- data.frame(mf = seq(0, 10000, 1)) # generate new dataframe with mf counts from 0 to 1000 by 1
-
-  out <- predict(fit, newdata = newdat, se.fit = T) # use predict function to calculate log(OAE prob) for each mean mf count in newdat
-
-  logpred <- data.frame(fit = out$fit, se = out$se.fit, mf = newdat$mf) # create dataframe with predicted log(OAE probs), standard error and mf counts
-
-  logpred <- within(logpred, {
-    lwr <- fit - 1.96 * se
-    upr <- fit + 1.96 * se
-  }) # calculate lwr and upper confidence intervals for log(OAE probs)
-
-  pred <- data.frame(fit = exp(logpred$fit), lwr = exp(logpred$lwr), upr = exp(logpred$upr), mf = logpred$mf) # exponentiate probabilities
-
-  OAE_probs <- pred$fit # extract probabilities into a vector
-
-  return(OAE_probs)
-
-}
-
-
-#' @title
-#' find individuals which develop OAE
-#'
-#' @description
-#' find individuals sampled between specific ages (default is 3 - 10 yrs) with new worm infection
-#' and can then develop onchocerciasis-associated epilepsy (OAE) in the next function
-#' (determined by probability associated with individual mf load)
-#'
-#' @param dat this is the master matrix (all.mats.temp) tracking mf and worm compartments (by age) for each individual
-#' @param mf.start starting column for mf in master matrix
-#' @param mf.end final column for mf in master matrix
-#' @param worms.start starting column for adult worms in master matrix
-#' @param nfw.start # start of infertile worms
-#' @param fw.end # end of fertile worms
-#' @param infected_at_all vector of all individuals to identify new infections for OAE disease
-#' @param age_to_samp sample of ages for each individual (default between 3 - 10 yrs of age) to match to ages in main matrix
-#' @param OAE vector of individuals defined as able to develop to OAE/ to determine whether OAE onset occurs
-#' @param tested_OAE vector to specify which individuals have been tested
-#'
-#' @returns vector with positions of new cases in the population
-find_indiv_OAE_func <- function(dat, mf.start, mf.end, worms.start, nfw.start, fw.end,
-                                infected_at_all, age_to_samp, OAE, tested_OAE, check_ind){
-
-  mf_all <- rowSums(dat[, mf.start : mf.end]) # sum mf per individual across all 21 age classes
-
-  # worms_all <- rowSums(dat[, worms.start : tot.worms]) # OLD: sum all worm categories per host (across 21 age classes)
-
-  male_worms_all <- rowSums(dat[, worms.start : nfw.start - 1]) # sum all male worms per host (across 21 age classes)
-  female_worms_all <- rowSums(dat[, nfw.start : fw.end]) # sum all female worms per host (across 21 age classes)
-
-  # ind_new_inf <- which(worms_all > 0 & infected_at_all == 0) # find individuals with at least 1 worm & no previous infection (therefore new)
-
-  ind_new_inf <- which(male_worms_all > 0 & female_worms_all > 0 & infected_at_all == 0) # find individuals where both male and female worms present
-  # (i.e. pair of mating worms present in host)
-
-  # print(ind_new_inf)
-
-  infected_at_all[ind_new_inf] <-  1 # where new worm infection, give value 1 at individual position in vector
-
-  ind_age <- which(round(dat[, 2]) == round(age_to_samp)) # find individuals (position in individual vector) where (rounded)
-  # age at sampling (e.g. between 3 - 10) matches (rounded) age of individual
-
-  # print(ind_age)
-
-  ind_ibf <- which(infected_at_all == 1) # extract position of currently with worm infection to inform OAE (not new infection to inform OAE)
-
-  ind_no_OAE <- which(OAE != 1) # extract position of individuals without OAE (so no current OAE?)
-
-  ind_no_samp <- which(tested_OAE == 0) # extract position of individuals not (previously?) tested
-
-  # print(age_to_samp)
-
-  tot_ind_ep_samp <- Reduce(intersect, list(ind_age, ind_ibf, ind_no_OAE, ind_no_samp)) # find common (intersect) ??? where same individual (position number in vector)
-  # present in all vectors (age sampled, new infection/OAE, no current OAE?,
-  # not previously sampled?, sex of individual?)
-  # defines new infections/OAE?
-  check_ind <- c(check_ind, length(tot_ind_ep_samp)) #
-
-  return(list(tot_ind_ep_samp, infected_at_all, check_ind))
-
-}
-
-#' @title
-#' calculate OAE incidence and prevalence
-#'
-#' @description
-#' each individual undergoes a Bernoulli trial (using OAE probabilities based on mf counts; new worm infection)
-#' to ascertain new incident cases of OAE (indexed by those individuals with new infection?)
-#'
-#' @param temp.mf vector of all mf per skin snip for each individual
-#' @param tot_ind_ep_samp vector with positions of new cases in the population
-#' @param OAE_probs vector of OAE probabilities for mf counts from 0 to 1000
-#' @param dat main matrix tracking age, sex, mf age compartments and worm age compartments for each individual
-#' @param prev_OAE vector containing prevalence of OAE to update
-#' @param OAE vector of individuals defined as able to develop to OAE/ to determine whether OAE onset occurs
-#' @param tested_OAE vector to specify which individuals have been tested
-#' @param OAE_incidence_DT OAE incidence vector (whole population) to update
-#' @param OAE_incidence_DT_under_5 OAE incidence vector in under 5 years (3 - 5 years) to update
-#' @param OAE_incidence_DT_5_10 OAE incidence vector in 5 - 10 years to update
-#' @param OAE_incidence_DT_11_15 OAE incidence vector in 10 - 15 years to update
-#' @param OAE_incidence_DT_M OAE incidence vector in males to update
-#' @param OAE_incidence_DT_F OAE incidence vector in females to update
-#'
-#' @returns list containing i) updated OAE prevalence, ii) updated OAE incidence in whole population, iii - vi) updated OAE
-#' incidence in under 5 years, 5 - 10 years, 10 - 15 years, and males and females, vii) OAE probabilities for each individual based on mf count,
-#' viii) those tested/sampled
-new_OAE_cases_func <- function(temp.mf, tot_ind_ep_samp, OAE_probs, dat,
-                               prev_OAE, OAE, tested_OAE,
-                               OAE_incidence_DT, OAE_incidence_DT_under_5, OAE_incidence_DT_5_10, OAE_incidence_DT_11_15,
-                               OAE_incidence_DT_M, OAE_incidence_DT_F){
-
-
-  mf_round <- round(temp.mf[[2]][tot_ind_ep_samp]) + 1 # mf count (in those tested ?)
-  # note: if zero the first probability comes from from ep_probs
-  # note: +1 to account for (log) 0
-
-
-  OAE_rates <- OAE_probs[mf_round] # get probabilities (based on individual mf count)
-
-  OAE[tot_ind_ep_samp] <- rbinom(length(tot_ind_ep_samp), 1, OAE_rates) # for individuals (those positions of individuals as new cases)
-  # with an probability of OAE, they undergo a
-  # Bernoulli trial to ascertain whether OAE onset realized
-
-  tested_OAE[tot_ind_ep_samp] <- 1 # records that they've been tested (those identified in tot_ind_ep_samp are indexed)
-
-  prev_OAE <- c(prev_OAE, mean(OAE)) # calculate & update prevalence of OAE
-
-  new_inc <- length(which(OAE[tot_ind_ep_samp] == 1)) # how many infections (finds total new infected/OAE in all OAE)
-
-  OAE_incidence_DT <- c(OAE_incidence_DT, new_inc) # record + update number of new OAE cases
-
-  new_inc_under_5 <- length(which(OAE[tot_ind_ep_samp] == 1 & dat[tot_ind_ep_samp ,2] >= 3 & dat[tot_ind_ep_samp ,2]< 5 )) # new cases in under 5 age group
-  new_inc_5_10 <- length(which(OAE[tot_ind_ep_samp] == 1 & dat[tot_ind_ep_samp ,2] >= 5 & dat[tot_ind_ep_samp ,2]<= 10 )) # new cases in 5 to 10 age group
-  new_inc_11_15 <- length(which(OAE[tot_ind_ep_samp] == 1 & dat[tot_ind_ep_samp ,2] >= 10 & dat[tot_ind_ep_samp ,2]<= 15 )) # new cases in 10 to 15 age group
-
-  new_inc_M <- length(which(OAE[tot_ind_ep_samp] == 1 & dat[tot_ind_ep_samp ,3] == 1)) # new cases in males
-  new_inc_F <- length(which(OAE[tot_ind_ep_samp] == 1 & dat[tot_ind_ep_samp ,3] == 0)) # new cases in females
-
-  OAE_incidence_DT_under_5 <- c(OAE_incidence_DT_under_5, new_inc_under_5) # record & update incidence in under 5 age group
-  OAE_incidence_DT_5_10 <- c(OAE_incidence_DT_5_10, new_inc_5_10) # record & update incidence in 5 to 10 age group
-  OAE_incidence_DT_11_15 <- c(OAE_incidence_DT_11_15, new_inc_11_15) # record & update incidence in 10 to 15 age group
-
-  OAE_incidence_DT_M <- c(OAE_incidence_DT_M, new_inc_M) # record & update incidence in males
-  OAE_incidence_DT_F <- c(OAE_incidence_DT_F, new_inc_F) # record & update incidence in females
-
-  return(list(prev_OAE, OAE_incidence_DT, OAE_incidence_DT_under_5, OAE_incidence_DT_5_10, OAE_incidence_DT_11_15,
-              OAE_incidence_DT_F, OAE_incidence_DT_M,
-              OAE_rates, OAE, tested_OAE))
-
-}
-
-# adult_worm_dynamics_functions
-
-#' @title
-#' delta.h
-#' @description
-#' proportion of L3 larvae (final life stage in the fly population) developing into adult worms in humans (Pi_H in Hamley et al. 2019)
-#' @param delta.hz proportion of L3 larvae establishing/ developing to adult stage within human host, per bit, when ATP tends to 0
-#' @param delta.hinf proportion of L3 larvae establishing/ developing to adult stage within human host, per bit, when ATP tends to infinity
-#' @param c.h severity of transmission intensity - dependent parasite establishment within humans
-#' @param L3 mean number of L3 in fly population
-#' @param m  vector to human host ratio
-#' @param beta per blackfly biting rate on humans (product of proportion of blackfly bites take on humans (h) & reciprocal of the duration of the gonotrophic cycle (g))
-#' @param expos individuals total (age/sex-specific and individual-specific) exposure to blackfly bites
-#'
-#' @returns vector of density-dependent (delta_h) values per individual in the population
-delta.h <- function(delta.hz, delta.hinf, c.h, L3, m , beta, expos)
-
-{
-  out <- (delta.hz + delta.hinf * c.h * m * beta *  L3 * expos) / (1 + c.h * m * beta * L3 * expos)
-  return(out)
-}
-
-
-#' @title
-#' Wplus1.rate
-#' @description
-#' Individual rate of acquisition of new infections (male and female adult worms) in humans
-#' @param delta.hz proportion of L3 larvae establishing/ developing to adult stage within human host, per bit, when ATP tends to 0
-#' @param delta.hinf proportion of L3 larvae establishing/ developing to adult stage within human host, per bit, when ATP tends to infinity
-#' @param c.h severity of transmission intensity - dependent parasite establishment within humans
-#' @param L3 mean number of L3 in fly population
-#' @param m  vector to human host ratio
-#' @param beta per blackfly biting rate on humans (product of proportion of blackfly bites take on humans (h) & reciprocal of the duration of the gonotrophic cycle (g))
-#' @param expos individuals total (age/sex-specific and individual-specific) exposure to blackfly bites
-#' @param DT timestep
-#'
-#' @returns vector of acquisition rates (probabilities) per individual in the population
-Wplus1.rate <- function(delta.hz, delta.hinf, c.h, L3, m , beta, expos, DT)
-
-{
-  dh <- delta.h(delta.hz, delta.hinf, c.h, L3, m , beta, expos) # matt: density-dep (L3 establishing in human host)
-
-  out <- DT * m * beta * dh * expos * L3 # matt: individual rate of acquisition of male / female adult worms - distrecte-time stochastic process with this probablility (pg.7 SI) ?
-
-  return(out)
-}
-
-#' @title
-#' weibull.mortality
-#' @description
-#' age-dependent mortality for adult worms and microfilariae (mortality rates assumed to increase as a funcction of parasite age, according to a Weibull distribution of survival times)
-#' @param DT timestep
-#' @param par1 shape parameter 1 in Weibull distribution (y_l in Hamley et al. 2019 supplementary material; equations S6 and S7)
-#' @param par2 shape parameter 2 in Weibull distribution (d_l in Hamley et al. 2019 supplementary material; equations S6 and S7)
-#' @param age.cats vector of age categories for mf or adults worms (default is 21)
-#'
-#' @returns vector of mortality rates (mf or adult worms) for each age class/category
-weibull.mortality <- function(DT, par1, par2, age.cats)
-
-{
-  out <- DT  * (par1 ^ par2) * par2 * (age.cats ^ (par2-1))
-
-  return(out)
-}
-
-
-#' @title
-#' change.worm.per.ind1
-#' @description
-#' Extracting key columns from overall matrix & evaluating different worm categories (for a specific age class of worms in each individual population).
-#' These vectors are important for the next functions to calculate change in number of adults in one adult worm age class for all people.
-#' @param treat.vec vector of treatment values (1 or 0) for each individual in the population
-#' @param lambda.zero per-capita rate that female worms lose their fertility (W_FF) & return to non-fertile state (W_FN); default value of 0.33 year-1
-#' @param DT timestep
-#' @param omeg per-capita rate that female worms progress from non-fertile (W_FN) to fertile (W_FF); default is 0.59 year-1
-#' @param ws starting worm compartment (first age class) - this is column 28 in the main matrix
-#' @param compartment which worm age-compartment (iteration k)
-#' @param total.dat main matrix containing different worm compartments for age-classes
-#' @param mort.rates vector of mortality rates (adult worms) for each age class/category
-#' @param time.each.comp Duration of each age class for adult worms (q_W in Hamley et al. 2019 supp); 1 year default
-#' @param new.worms.m vector of (binomial) drawn adult male worms from last column of delay matrix
-#' @param w.f.l.c vector for worms coming from previous compartment (0 when k ==1)
-#' @param num.comps number of age compartments for each worm category
-#'
-#' @returns list containing vector/values of a) lambda values per individual, b) mortality value for females per individual c) buman pop size
-#' d) number of current non-fertile female worms per individual e) number of current fertile female worms per individual
-#' f) treatment or no treatment value per individual g) omega value per individual h) total male worms per individual i) male worms lost per individual
-change.worm.per.ind1 <- function(treat.vec, lambda.zero, DT, omeg, ws, compartment, total.dat,
-                                 mort.rates, time.each.comp, new.worms.m, w.f.l.c, num.comps)
-{
-  N <- length(treat.vec)
-
-  lambda.zero.in <- rep(lambda.zero * DT, N) #loss of fertility
-  omeg <- rep(omeg * DT, N) #becoming fertile
-
-  #male worms
-
-  cl <- (ws-1) + compartment #calculate which column to use depending on sex, type (fertile or infertile) and compartment
-
-  cur.Wm <- total.dat[, cl] #take current number of worms from matrix
-
-  worm.dead.males <- rbinom(N, cur.Wm, rep(mort.rates[compartment], N))
-  worm.loss.males <- rbinom(N, (cur.Wm - worm.dead.males), rep((DT / time.each.comp), N))
-
-
-  if(compartment == 1)
-
-  {
-    male.tot.worms <- cur.Wm + new.worms.m - worm.loss.males - worm.dead.males
-  }
-
-  if(compartment > 1)
-
-  {
-    male.tot.worms <- cur.Wm + w.f.l.c[[2]] - worm.loss.males - worm.dead.males
-  }
-
-  #female worms
-
-  clnf <- (ws - 1) + num.comps + compartment #column for infertile females, num.comps skips over males
-
-  clf <- (ws - 1) + 2*num.comps + compartment #column for fertile females, 2*num.comps skips over males and infertile females
-
-  cur.Wm.nf <- total.dat[, clnf] #take current worm number from matrix infertile females
-
-  cur.Wm.f <- total.dat[, clf] #take current worm number from matrix fertile females
-
-  mort.fems <- rep(mort.rates[compartment], N)
-
-
-  return(list(lambda.zero.in, mort.fems, N, cur.Wm.nf, cur.Wm.f, treat.vec,
-              omeg, male.tot.worms, worm.loss.males))
-}
-
-
-#' @title
-#' change.worm.per.ind.treat
-#' @description
-#' updating worm compartments based on treatment (if this occurs) i.e., considering additional mortality and loss of fertility due to ivermectin treatment;
-#' approach assumes individuals which are moved from fertile to non and fertile class due to treatment re-enter fertile class at standard rate
-#' @param give.treat value (1 or 0) indicating whether treatment occurs
-#' @param iteration iteration along vector of times
-#' @param treat.start iteration where treatment starts
-#' @param times.of.treat sequence of treatment times
-#' @param treat.stop iteration where treatment stops
-#' @param onchosim.cov vector of which individuals will be treated if treatment is given
-#' @param treat.vec vector of times since treatment for each individual
-#' @param DT timestep
-#' @param cum.infer proportion of adult female worms made permanently infertility due to ivermectin at each round (lambda'_p in Hamley et al. 2019 supp); default is 0.345
-#' @param lam.m embryostatic effects of ivermectin; lam.m is the max rate of transient treatment-induced sterility (lambda_max in Hamley et al. 2019 supp): default is 32.4 year-1
-#' @param phi rate of decay of ivermectin-induced female worm sterlisation; default is 19.6 year-1
-#' @param N total human population size
-#' @param mort.fems vector of mortality rates (adult worms) for each age class/category; updated in change.worm.per.ind1
-#' @param lambda.zero.in updated vector of per-capita rate that female worms lose their fertility & return to non-fertile state
-#'
-#' @returns list containing vector of a) updated lambda values per individual, b) updated (or not) vector of times since treatment for each individual
-change.worm.per.ind.treat <- function(give.treat, iteration, treat.start, times.of.treat, treat.stop,
-                                      onchosim.cov, treat.vec, DT, cum.infer, lam.m, phi, N,
-                                      mort.fems, lambda.zero.in)
-{
-
-  if(give.treat == 1 & iteration >= treat.start)
-  {
-
-    if((sum(times.of.treat == iteration) == 1) & iteration <= treat.stop) #is it a treatment time
-
-    {
-      #print('TREATMENT GIVEN')
-
-      inds.to.treat <- which(onchosim.cov == 1) #which individuals will received treatment
-
-      treat.vec[inds.to.treat]  <-  (iteration-1) * DT #alter time since treatment
-      #cum.infer is the proportion of female worms made permanently infertile, killed for simplicity
-      if(iteration > treat.start) {mort.fems[inds.to.treat] <- mort.fems[inds.to.treat] + (cum.infer)} #alter mortality
-    }
-
-
-    tao <- ((iteration-1)*DT) - treat.vec #vector of toas, some will be NA
-
-    lam.m.temp <- rep(0, N); lam.m.temp[which(is.na(treat.vec) != TRUE)] <- lam.m #individuals which have been treated get additional infertility rate
-
-    f.to.nf.rate <- DT * (lam.m.temp * exp(-phi * tao)) #account for time since treatment (fertility reduction decays with time since treatment)
-
-    f.to.nf.rate[which(is.na(treat.vec) == TRUE)] <- 0 #these entries in f.to.nf.rate will be NA, lambda.zero.in cannot be NA
-
-    lambda.zero.in <- lambda.zero.in + f.to.nf.rate #update 'standard' fertile to non fertile rate to account for treatment
-
-  }
-
-  return(list(lambda.zero.in, treat.vec, mort.fems))
-
-}
-
-#' @title
-#' change.worm.per.ind2
-#' @description
-#' final function to calculate the change in the number of adult worms in one adult worm age class for all people
-#' @param DT timestep
-#' @param time.each.comp Duration of each age class for adult worms (q_W in Hamley et al. 2019 supp); 1 year default
-#' @param compartment which worm age-compartment (iteration k)
-#' @param new.worms.nf.fo new non-fertile female worms (binomial draw)
-#' @param w.f.l.c vector for worms coming from previous compartment (0 when k ==1)
-#' @param N total human population size
-#' @param cur.Wm.nf number of current non-fertile female worms per individual
-#' @param mort.fems mortality value for females per individual (from change.worm.per.ind1 function)
-#' @param cur.Wm.f number of current fertile female worms per individual
-#' @param omeg omega value per individual (from change.worm.per.ind1 function)
-#' @param male.tot.worms vector of total male worms per individual (from change.worm.per.ind1 function)
-#' @param worm.loss.males vector of male worms lost per individual (from change.worm.per.ind1 function)
-#' @param lambda.zero.in updated lambda values per individual (updated fertile to non fertile rate to account for treatment or non-updated) from change.worm.per.ind.treat
-#' @param treat.vec updated (or not) vector of times since treatment for each individual from change.worm.per.ind.treat
-#'
-#' @returns list containing vector of a) total male worms per individual (not updated on treatment, so from change.worm.per.ind1),
-#' b) male worms lost per individual (not updated on treatment, so from change.worm.per.ind1), c) vector of non-fertile female worms per individual
-#' d) vector of fertile female worms per individual, e) vector of number of non-fertile worms lost per individual,
-#' f) vector of number fertile worms lost per individual, g) updated (or not) vector of times since treatment for each individual (taken from change.worm.per.ind.treat)
-change.worm.per.ind2 <- function(DT, time.each.comp, compartment, new.worms.nf.fo, w.f.l.c,
-                                 N, cur.Wm.nf, mort.fems, cur.Wm.f, omeg,
-                                 male.tot.worms, worm.loss.males,
-                                 lambda.zero.in, treat.vec)
-
-{
-  worm.dead.nf <- rbinom(N, cur.Wm.nf, mort.fems) #movement to next compartment
-
-  worm.dead.f <- rbinom(N, cur.Wm.f, mort.fems)
-
-  worm.loss.age.nf <- rbinom(N, (cur.Wm.nf - worm.dead.nf), rep((DT / time.each.comp), N))
-
-  worm.loss.age.f <- rbinom(N, (cur.Wm.f - worm.dead.f), rep((DT / time.each.comp), N))
-
-
-  #calculate worms moving between fertile and non fertile, deaths and aging
-
-  #females from fertile to infertile
-
-  new.worms.nf.fi <- rep(0, N)
-
-  trans.fc <- which((cur.Wm.f - worm.dead.f - worm.loss.age.f) > 0)
-
-  #individuals which still have fertile worms in an age compartment after death and aging
-  if(length(trans.fc) > 0)
-  {
-    new.worms.nf.fi[trans.fc] <- rbinom(length(trans.fc), (cur.Wm.f[trans.fc] - worm.dead.f[trans.fc] - worm.loss.age.f[trans.fc]), lambda.zero.in[trans.fc])
-  }
-
-
-  #females worms from infertile to fertile, this happens independent of males, but production of mf depends on males
-
-  #individuals which still have non fertile worms in an age compartment after death and aging
-  new.worms.f.fi <- rep(0, N)
-
-  trans.fc <-  which((cur.Wm.nf - worm.dead.nf - worm.loss.age.nf) > 0)
-  if(length(trans.fc) > 0)
-  {
-    new.worms.f.fi[trans.fc] <- rbinom(length(trans.fc), (cur.Wm.nf[trans.fc] - worm.dead.nf[trans.fc] - worm.loss.age.nf[trans.fc]), omeg[trans.fc])#females moving from infertile to fertile
-  }
-
-
-  if(compartment == 1) #if it's the first adult worm age compartment
-
-  {
-    nf.out <- cur.Wm.nf + new.worms.nf.fo + new.worms.nf.fi - worm.loss.age.nf - new.worms.f.fi - worm.dead.nf #final number of infertile worms
-
-    f.out <- cur.Wm.f + new.worms.f.fi - worm.loss.age.f - new.worms.nf.fi - worm.dead.f #final number of fertile worms
-  }
-
-  if(compartment > 1)
-
-  {
-    nf.out <- cur.Wm.nf + new.worms.nf.fi - worm.loss.age.nf - new.worms.f.fi + w.f.l.c[[5]] - worm.dead.nf#w.f.l.c = worms from previous compartment
-
-    f.out <- cur.Wm.f + new.worms.f.fi - worm.loss.age.f - new.worms.nf.fi + w.f.l.c[[6]] - worm.dead.f
-  }
-
-
-  return(list(male.tot.worms,
-              worm.loss.males,
-              nf.out,
-              f.out,
-              worm.loss.age.nf,
-              worm.loss.age.f, treat.vec))
-
-}
-
-# Run the models
+iter <- as.numeric(Sys.getenv("PBS_ARRAY_INDEX"))
+set.seed(iter + (iter*3758))
 
 DT.in <- 1/366
-timesteps = 50
+timesteps = 200
 give.treat.in = 0
 treat.strt = 1; treat.stp = 16
 trt.int = 1
@@ -1797,5 +1821,5 @@ output <- ep.equi.sim(time.its = timesteps,
                       print_progress=TRUE,
                       calc_ov16 = TRUE)
 
-saveRDS(output, paste("/rds/general/user/ar722/ephemeral/ov16_test/ov16_output",iter,".rds", sep=""))
+saveRDS(output, paste("/rds/general/user/ar722/ephemeral/ov16_test/ov16_output/ov16_output",iter,".rds", sep=""))
 

@@ -1,8 +1,11 @@
-allOutputs <- data.frame(matrix(ncol=9))
-colnames(allOutputs) <- c("age", "sex", "ov16_pos", "mf_prev", "age_pre", "sex_pre", "ov16_pos_pre", "mf_prev_pre", "run_num")
+library(dplyr)
+library(ggplot2)
 
-files <- c('ov16_output_1/', 'ov16_output_l3/')
-fileToUse <- paste("data/", files[2], sep="")
+allOutputs <- data.frame(matrix(ncol=13))
+colnames(allOutputs) <- c("age", "sex", "ov16_pos", "ov16_estab", "ov16_juvy", "mf_prev", "age_pre", "sex_pre", "ov16_pos_pre", "ov16_estab_pre", "ov16_juvy_pre", "mf_prev_pre", "run_num")
+
+files <- c('ov16_output_1/', 'ov16_output_l3/', 'ov16_output_l3_2/', 'ov16_output_l3_3/')
+fileToUse <- paste("data/", files[4], sep="")
 
 i <- 1
 for (file in list.files(fileToUse)) {
@@ -23,11 +26,20 @@ for (file in list.files(fileToUse)) {
 
   ov16_seropos_pre <- tmpRDSData$ov16_seropositive_pre_treatment
 
+  ov16_seropos_l3_estab <- tmpRDSData$ov16_seropositive_l3_estab
+
+  ov16_seropos_l3_estab_pre <- tmpRDSData$ov16_seropositive_l3_estab_pre_treatment
+
+  ov16_juvy <- tmpRDSData$ov16_seropositive_juvy_adult
+
+  ov16_juvy_pre <- tmpRDSData$ov16_seropositive_juvy_adult_pre_treatment
+
+
   tmpNumRows <- length(age)
   startIndex <- 1+tmpNumRows*(i-1)
   endIndex <- tmpNumRows*i
-  allOutputs[startIndex:endIndex,-9] <- list(age, sex, ov16_seropos, mf_prev, age_pre, sex_pre, ov16_seropos_pre, mf_prev_pre)
-  allOutputs[startIndex:endIndex,9] <- i
+  allOutputs[startIndex:endIndex,-13] <- list(age, sex, ov16_seropos, ov16_seropos_l3_estab, ov16_juvy, mf_prev, age_pre, sex_pre, ov16_seropos_pre, ov16_seropos_l3_estab_pre, ov16_juvy_pre, mf_prev_pre)
+  allOutputs[startIndex:endIndex,13] <- i
   i <- i + 1
 }
 
@@ -74,27 +86,56 @@ allOutputs <- allOutputs %>% filter(!is.na(allOutputs$run_num)) %>% mutate(new_a
                                                                              TRUE ~ 80
                                                                            ))
 
-tmpDf <- allOutputs %>% dplyr::group_by(age_groups, sex) %>% dplyr::summarise(ov16_prev=mean(ov16_pos), mf_prev=mean(mf_prev)) %>% as.data.frame() #%>% tidyr::pivot_longer(c(ov16_prev, mf_prev), names_to="treatment", values_to="ov16_prev") %>% as.data.frame()
-tmpDf[(dim(tmpDf)[1]+1),] <- list(0, 'Female', 0, 0)
-tmpDf[(dim(tmpDf)[1]+1),] <- list(0, 'Male', 0, 0)
+tmpDf <- allOutputs %>% dplyr::group_by(age_groups, sex) %>% dplyr::summarise(ov16_prev=mean(ov16_pos), mf_prev=mean(mf_prev), ov16_estab_prev=mean(ov16_estab), ov16_juvy_prev=mean(ov16_juvy)) %>% as.data.frame() #%>% tidyr::pivot_longer(c(ov16_prev, mf_prev), names_to="treatment", values_to="ov16_prev") %>% as.data.frame()
+tmpDf[(dim(tmpDf)[1]+1),] <- list(0, 'Female', 0, 0, 0, 0)
+tmpDf[(dim(tmpDf)[1]+1),] <- list(0, 'Male', 0, 0, 0, 0)
 
 
-tmpDf2 <- allOutputs %>% dplyr::group_by(age_groups_pre, sex_pre) %>% dplyr::summarise(ov16_prev_pre=mean(ov16_pos_pre), mf_prev_pre=mean(mf_prev_pre)) %>% as.data.frame() #%>% tidyr::pivot_longer(c(mf_prev, mf_prev_pre), names_to="treatment", values_to="mf_prev") %>% as.data.frame()
-tmpDf2[(dim(tmpDf2)[1]+1),] <- list(0, 'Female', 0, 0)
-tmpDf2[(dim(tmpDf2)[1]+1),] <- list(0, 'Male', 0, 0)
+tmpDf2 <- allOutputs %>% dplyr::group_by(age_groups_pre, sex_pre) %>% dplyr::summarise(ov16_prev_pre=mean(ov16_pos_pre), mf_prev_pre=mean(mf_prev_pre), ov16_estab_prev_pre=mean(ov16_estab_pre), ov16_juvy_prev_pre=mean(ov16_juvy_pre)) %>% as.data.frame() #%>% tidyr::pivot_longer(c(mf_prev, mf_prev_pre), names_to="treatment", values_to="mf_prev") %>% as.data.frame()
+tmpDf2[(dim(tmpDf2)[1]+1),] <- list(0, 'Female', 0, 0, 0, 0)
+tmpDf2[(dim(tmpDf2)[1]+1),] <- list(0, 'Male', 0, 0, 0, 0)
 
 ov16_graph <- ggplot() +
   geom_line(aes(x=age_groups_pre, y=ov16_prev_pre*100, color="Pre Treatment", linetype=sex_pre), data=tmpDf2) +
   geom_line(aes(x=age_groups, y=ov16_prev*100, color='Post Treatment', linetype=sex), data=tmpDf) +
   xlab("Age") +
   ylab("OV16 Seroprevalence (%)") +
+  ggtitle("Ov16 Seroprevalence upon L3 Exposure") +
   ylim(0, 100) +
   scale_linetype_manual(values=c("dashed", "dotted")) +
   scale_color_manual(values=c("red", "black"))
 
 ov16_graph
 
-ggsave("ov16_graph.png", ov16_graph, width=3500, height = 2000, units="px", dpi=600)
+ov16_graph_l3 <- ggplot() +
+  geom_line(aes(x=age_groups_pre, y=ov16_estab_prev_pre*100, color="Pre Treatment", linetype=sex_pre), data=tmpDf2) +
+  geom_line(aes(x=age_groups, y=ov16_estab_prev*100, color='Post Treatment', linetype=sex), data=tmpDf) +
+  xlab("Age") +
+  ylab("OV16 Seroprevalence (%)") +
+  ggtitle("Ov16 Seroprevalence at midpoint of development to adult") +
+  ylim(0, 100) +
+  scale_linetype_manual(values=c("dashed", "dotted")) +
+  scale_color_manual(values=c("red", "black"))
+
+ov16_graph_l3
+
+ov16_graph_juvy <- ggplot() +
+  geom_line(aes(x=age_groups_pre, y=ov16_juvy_prev_pre*100, color="Pre Treatment", linetype=sex_pre), data=tmpDf2) +
+  geom_line(aes(x=age_groups, y=ov16_juvy_prev*100, color='Post Treatment', linetype=sex), data=tmpDf) +
+  xlab("Age") +
+  ylab("OV16 Seroprevalence (%)") +
+  ggtitle("Ov16 Seroprevalence at upon developing to a juvinile adult") +
+  ylim(0, 100) +
+  scale_linetype_manual(values=c("dashed", "dotted")) +
+  scale_color_manual(values=c("red", "black"))
+
+ov16_graph_juvy
+
+larvae_graphs <- grid.arrange(ov16_graph, ov16_graph_l3, ov16_graph_juvy, ncol=2)
+ggsave("larvae_graphs.png", larvae_graphs, width=7000, height = 2000, units="px", dpi=600)
+
+
+#ggsave("ov16_graph.png", ov16_graph, width=3500, height = 2000, units="px", dpi=600)
 
 
 mf_prev_graph <- ggplot()  +

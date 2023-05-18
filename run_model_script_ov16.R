@@ -14,20 +14,14 @@ devtools::load_all()
 
 #set.seed(iter + (iter*3758))
 
+allOutputs <- data.frame(matrix(ncol=9))
+colnames(allOutputs) <- c("age", "sex", "ov16_pos", "mf_prev", "age_pre", "sex_pre", "ov16_pos_pre", "mf_prev_pre", "run_num")
+
+#---- Single Run ------#
+
 DT.in <- 1/366
-timesteps = 200
-give.treat.in = 0
-treat.strt = 1; treat.stp = 16
-trt.int = 1
-
-
-#ABR_in <- 41922 #annual biting rate
-# brz <- c(1500, 2000, 3000)
-#
-# abr_vec <- rep(brz, 400)
-#
-#
-# ABR.in <- abr_vec[runif(1, 1, length(abr_vec))]
+timesteps = 50
+give.treat.in = 0; treat.strt = 1; treat.stp = 2; trt.int = 1
 ABR.in <- 1500
 
 output_equilibrium <-  ep.equi.sim(time.its = timesteps,
@@ -45,27 +39,61 @@ output_equilibrium <-  ep.equi.sim(time.its = timesteps,
                        c.h.in = 0.005,
                        gam.dis.in = 0.3,
                        run_equilibrium=TRUE,
-                       print_progress=TRUE)
+                       print_progress=TRUE,
+                       calc_ov16=TRUE)
 
 
 # Now add treatment
 
-treat.len <- 18 #treatment duration in years
-treat.strt.yrs <- 20
-yrs.post.treat <- 0
-
-treat.strt  = round(treat.strt.yrs / (DT.in )); treat.stp = treat.strt + round(treat.len / (DT.in ))
+treat.len = 18; treat.strt.yrs = 20; yrs.post.treat = 0
 
 treat.strt = treat.strt.yrs; treat.stp = treat.strt + treat.len
-timesteps = treat.stp + round(yrs.post.treat / (DT.in )) #final duration
 timesteps = treat.stp + yrs.post.treat #final duration
 
-give.treat.in = 1 # set to 0 to turn off treatment
-trt.int = 1 #treatment interval (years, 0.5 gives biannual)
+give.treat.in = 1; trt.int = 1
 
-numRuns <- 100
-allOutputs <- data.frame(matrix(ncol=9))
-colnames(allOutputs) <- c("age", "sex", "ov16_pos", "mf_prev", "age_pre", "sex_pre", "ov16_pos_pre", "mf_prev_pre", "run_num")
+output <- ep.equi.sim(time.its = timesteps,
+                      ABR = ABR.in,
+                      treat.int = trt.int,
+                      treat.prob = 0.80,
+                      give.treat = give.treat.in,
+                      treat.start = treat.strt,
+                      treat.stop = treat.stp,
+                      treat.timing = NA,
+                      pnc = 0.01,
+                      min.mont.age = 5,
+                      vector.control.strt = NA,
+                      delta.hz.in = 0.186,
+                      delta.hinf.in = 0.003,
+                      c.h.in = 0.005,
+                      gam.dis.in = 0.3,
+                      run_equilibrium = FALSE,
+                      equilibrium = output_equilibrium$all_equilibrium_outputs,
+                      print_progress=TRUE,
+                      calc_ov16 = TRUE)
+
+age <- output$all_infection_burdens[,2]
+
+age_pre <- output$all_infection_burdens_pre_treatment[,2]
+
+sex <- ifelse(output$all_infection_burdens[,3]==1, "Male", "Female")
+
+sex_pre <- ifelse(output$all_infection_burdens_pre_treatment[,3]==1, "Male", "Female")
+
+mf_prev <- output$mf_indv_prevalence
+
+mf_prev_pre <- output$mf_indv_prevalence_pre_treatment
+
+ov16_seropos <- output$ov16_seropositive
+
+ov16_seropos_pre <- output$ov16_seropositive_pre_treatment
+
+i<-1
+tmpNumRows <- length(age)
+startIndex <- 1+tmpNumRows*(i-1)
+endIndex <- tmpNumRows*i
+allOutputs[startIndex:endIndex,-9] <- list(age, sex, ov16_seropos, mf_prev, age_pre, sex_pre, ov16_seropos_pre, mf_prev_pre)
+allOutputs[startIndex:endIndex,9] <- i
 
 #---- Multi Run ------#
 
@@ -120,8 +148,6 @@ tmp <- foreach(
 
   give.treat.in = 1; trt.int = 1
 
-  #return(output_equilibrium$all_equilibrium_outputs)
-
   output <- ep.equi.sim(time.its = timesteps,
                         ABR = ABR.in,
                         treat.int = trt.int,
@@ -172,54 +198,6 @@ tmp <- foreach(
   print(Sys.time()-start)
 }
 
-write.csv(tmp, "100_runs.csv")
-
-for(i in 1:1) {
-  print(paste("Run Number:", i))
-  output <- ep.equi.sim(time.its = timesteps,
-                        ABR = ABR.in,
-                        treat.int = trt.int,
-                        treat.prob = 0.80,
-                        give.treat = give.treat.in,
-                        treat.start = treat.strt,
-                        treat.stop = treat.stp,
-                        treat.timing = NA,
-                        pnc = 0.01,
-                        min.mont.age = 5,
-                        vector.control.strt = NA,
-                        delta.hz.in = 0.186,
-                        delta.hinf.in = 0.003,
-                        c.h.in = 0.005,
-                        gam.dis.in = 0.3,
-                        run_equilibrium = FALSE,
-                        print_progress=FALSE,
-                        calc_ov16 = TRUE)
-
-  age <- output$all_infection_burdens[,2]
-
-  age_pre <- output$all_infection_burdens_pre_treatment[,2]
-
-  sex <- ifelse(output$all_infection_burdens[,3]==1, "Male", "Female")
-
-  sex_pre <- ifelse(output$all_infection_burdens_pre_treatment[,3]==1, "Male", "Female")
-
-  mf_prev <- output$mf_indv_prevalence
-
-  mf_prev_pre <- output$mf_indv_prevalence_pre_treatment
-
-  ov16_seropos <- output$ov16_seropositive
-
-  ov16_seropos_pre <- output$ov16_seropositive_pre_treatment
-
-  tmpNumRows <- length(age)
-  startIndex <- 1+tmpNumRows*(i-1)
-  endIndex <- tmpNumRows*i
-  allOutputs[startIndex:endIndex,-9] <- list(age, sex, ov16_seropos, mf_prev, age_pre, sex_pre, ov16_seropos_pre, mf_prev_pre)
-  allOutputs[startIndex:endIndex,9] <- i
-}
-
-write.csv(allOutputs, "data.csv")
-
 
 #---- Single Run -----#
 
@@ -264,40 +242,11 @@ endIndex <- tmpNumRows*i
 allOutputs[startIndex:endIndex,] <- list(age, sex, ov16_prev)
 
 
-# load data from rcs
+# viz
 
 allOutputs <- data.frame(matrix(ncol=9))
 colnames(allOutputs) <- c("age", "sex", "ov16_pos", "mf_prev", "age_pre", "sex_pre", "ov16_pos_pre", "mf_prev_pre", "run_num")
 
-i <- 1
-for (file in list.files('data/ov16_output/')) {
-  print(i)
-  tmpRDSData <- readRDS(paste('data/ov16_output/', file,sep=""))
-  age <- tmpRDSData$all_infection_burdens[,2]
-  age_pre <- tmpRDSData$all_infection_burdens_pre_treatment[,2]
-
-  sex <- ifelse(tmpRDSData$all_infection_burdens[,3]==1, "Male", "Female")
-
-  sex_pre <- ifelse(tmpRDSData$all_infection_burdens_pre_treatment[,3]==1, "Male", "Female")
-
-  mf_prev <- tmpRDSData$mf_indv_prevalence
-
-  mf_prev_pre <- tmpRDSData$mf_indv_prevalence_pre_treatment
-
-  ov16_seropos <- tmpRDSData$ov16_seropositive
-
-  ov16_seropos_pre <- tmpRDSData$ov16_seropositive_pre_treatment
-
-  tmpNumRows <- length(age)
-  startIndex <- 1+tmpNumRows*(i-1)
-  endIndex <- tmpNumRows*i
-  allOutputs[startIndex:endIndex,-9] <- list(age, sex, ov16_seropos, mf_prev, age_pre, sex_pre, ov16_seropos_pre, mf_prev_pre)
-  allOutputs[startIndex:endIndex,9] <- i
-  i <- i + 1
-}
-
-
-# viz
 #allOutputs <- tmp_df
 allOutputs <- allOutputs %>% filter(!is.na(allOutputs$run_num)) %>% mutate(new_age = round(age/10)*10,
                                     age_groups = case_when(
