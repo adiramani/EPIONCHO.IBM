@@ -1,6 +1,6 @@
 
 
-#### Current file: R/adult_worm_dynamics_functions.R
+#### Current file: R/adult_worm_dynamics_functions.R 
 
 #' @title
 #' delta.h
@@ -287,7 +287,7 @@ change.worm.per.ind2 <- function(DT, time.each.comp, compartment, new.worms.nf.f
 
 
 
-#### Current file: R/epilepsy_module_functions.R
+#### Current file: R/epilepsy_module_functions.R 
 
 #' @title
 #' OAE probability function
@@ -459,7 +459,7 @@ new_OAE_cases_func <- function(temp.mf, tot_ind_ep_samp, OAE_probs, dat,
 }
 
 
-#### Current file: R/Intervention_functions.R
+#### Current file: R/Intervention_functions.R 
 
 #' @title
 #' Treat individuals function
@@ -500,7 +500,7 @@ os.cov <- function(all.dt, pncomp, covrg, N)
 }
 
 
-#### Current file: R/larval_dynamics_functions.R
+#### Current file: R/larval_dynamics_functions.R 
 
 #' @title
 #' Density-dependence in vector
@@ -595,7 +595,7 @@ calc.L3 <- function(nutwo, L2.in, a.H, g, mu.v, sigma.L0)
 
 
 
-#### Current file: R/mf_dynamics_functions.R
+#### Current file: R/mf_dynamics_functions.R 
 
 #' @title
 #' rotate matrix
@@ -905,7 +905,7 @@ prevalence.for.age_sex_compl.strata <- function(ss.in, main.dat, lwr_age, upr_ag
 
 
 
-#### Current file: R/Model_wrappers.R
+#### Current file: R/Model_wrappers.R 
 
 #EPIONCHO-IBM
 #30/04/2020
@@ -1107,6 +1107,7 @@ ep.equi.sim <- function(time.its,
   worms.start <- 7 + num.mf.comps
 
   nfw.start <- 7 + num.mf.comps + num.comps.worm # start of infertile worms
+  fw.start <- nfw.start + num.comps.worm # start of fertile worms
   fw.end <- num.cols # end of fertile worms
   mf.start <- 7
   mf.end <- 6 + num.mf.comps
@@ -1330,8 +1331,6 @@ ep.equi.sim <- function(time.its,
 
   if(calc_ov16) {
     Ov16_Seropositive <- rep(0, N)
-    Ov16_Seropositive_l3_estab <- rep(0, N)
-    Ov16_Seropositive_juvy_adult <- rep(0, N)
     mf_indv_prev <- rep(0, N)
 
     # 80% of pop is able to mount Antibody response to Ov16
@@ -1363,8 +1362,6 @@ ep.equi.sim <- function(time.its,
 
       all.mats.temp_pre_treat <- all.mats.temp
       Ov16_Seropositive_pre_treat <- Ov16_Seropositive
-      Ov16_Seropositive_l3_estab_pre_treat <- Ov16_Seropositive_l3_estab
-      Ov16_Seropositive_juvy_adult_pre_treat <- Ov16_Seropositive_juvy_adult
       mf_indv_prev_pre_treat <- mf_indv_prev
 
     }
@@ -1618,21 +1615,12 @@ ep.equi.sim <- function(time.its,
 
     L3_vec <- c(L3_vec, mean(all.mats.temp[, 6]))
 
-    #ov16_sero
     if(calc_ov16) {
-      indv_L3_exp <- l.extras[,1]
-      indv_estab <- l.extras[,length(l.extras[1,])]
-      indv_juvy_adult <- l.extras[,1]
+      indv_mating_pair <- ((rowSums(all.mats.temp[,worms.start:nfw.start])) > 0 & (rowSums(all.mats.temp[, fw.start:fw.end]) > 0))
       indv_antib <- all.mats.temp[,num.cols+ov16.col]
 
-      new_inf_Ov16 <- which(indv_L3_exp > 0 & Ov16_Seropositive == 0 & indv_antib == 1)
+      new_inf_Ov16 <- which(indv_mating_pair == TRUE & Ov16_Seropositive == 0 & indv_antib == 1)
       Ov16_Seropositive[new_inf_Ov16] <- 1
-
-      new_inf_Ov16_estab <- which(indv_estab > 0 & Ov16_Seropositive_l3_estab == 0 & indv_antib == 1)
-      Ov16_Seropositive_l3_estab[new_inf_Ov16_estab] <- 1
-
-      new_inf_Ov16_juvy <- which(indv_juvy_adult > 0 & Ov16_Seropositive_juvy_adult == 0 & indv_antib == 1)
-      Ov16_Seropositive_juvy_adult[new_inf_Ov16_juvy] <- 1
 
       mf_indv_prev <- as.integer(temp.mf[[2]] > 0)
       prev_Ov16 <- c(prev_Ov16, sum(Ov16_Seropositive)/N)
@@ -1664,8 +1652,6 @@ ep.equi.sim <- function(time.its,
 
       if(calc_ov16) {
         Ov16_Seropositive[to.die] <- 0
-        Ov16_Seropositive_l3_estab[to.die] <- 0
-        Ov16_Seropositive_juvy_adult[to.die] <- 0
         mf_indv_prev[to.die] <- 0
       }
 
@@ -1748,8 +1734,8 @@ ep.equi.sim <- function(time.its,
       outp <- list(prev, mean.mf.per.snip, L3_vec, ABR, all.mats.temp, ABR_recorded, coverage.recorded)
       names(outp) <-  c('mf_prev', 'mf_intens', 'L3', 'ABR', 'all_infection_burdens', 'ABR_recorded', 'coverage.recorded')
       if(calc_ov16) {
-        ov16_output <- list(Ov16_Seropositive, Ov16_Seropositive_l3_estab, Ov16_Seropositive_juvy_adult, mf_indv_prev, Ov16_Seropositive_pre_treat, Ov16_Seropositive_l3_estab_pre_treat, Ov16_Seropositive_juvy_adult_pre_treat, mf_indv_prev_pre_treat, all.mats.temp_pre_treat)
-        names(ov16_output) <- c('ov16_seropositive', 'ov16_seropositive_l3_estab', 'ov16_seropositive_juvy_adult', 'mf_indv_prevalence', 'ov16_seropositive_pre_treatment', 'ov16_seropositive_l3_estab_pre_treatment', 'ov16_seropositive_juvy_adult_pre_treatment', 'mf_indv_prevalence_pre_treatment', 'all_infection_burdens_pre_treatment')
+        ov16_output <- list(Ov16_Seropositive, mf_indv_prev, Ov16_Seropositive_pre_treat, mf_indv_prev_pre_treat, all.mats.temp_pre_treat)
+        names(ov16_output) <- c('ov16_seropositive', 'mf_indv_prevalence', 'ov16_seropositive_pre_treatment', 'mf_indv_prevalence_pre_treatment', 'all_infection_burdens_pre_treatment')
         outp <- append(outp, ov16_output)
       }
       return(outp)
@@ -1760,7 +1746,7 @@ ep.equi.sim <- function(time.its,
 }
 
 
-#### Current file: runModelRCS.R
+#### Current file: runModelRCS.R 
 
 library(dplyr)
 
@@ -1821,5 +1807,5 @@ output <- ep.equi.sim(time.its = timesteps,
                       print_progress=TRUE,
                       calc_ov16 = TRUE)
 
-saveRDS(output, paste("/rds/general/user/ar722/ephemeral/ov16_test/ov16_output/ov16_output",iter,".rds", sep=""))
+saveRDS(output, paste("/rds/general/user/ar722/home/ov16_test/ov16_output/ov16_mating_output",iter,".rds", sep=""))
 

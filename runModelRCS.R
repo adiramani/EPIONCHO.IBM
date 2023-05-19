@@ -57,5 +57,5 @@ output <- ep.equi.sim(time.its = timesteps,
                       print_progress=TRUE,
                       calc_ov16 = TRUE)
 
-saveRDS(output, paste("/rds/general/user/ar722/ephemeral/ov16_test/ov16_output",iter,".rds", sep=""))
+saveRDS(output, paste("/rds/general/user/ar722/home/ov16_test/ov16_output/ov16_mating_output",iter,".rds", sep=""))
 
