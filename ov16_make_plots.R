@@ -103,6 +103,9 @@ ov16_graph <- ggplot() +
   ggtitle("Ov16 Seroprevalence upon L3 Exposure") +
   ylim(0, 100) +
   scale_linetype_manual(values=c("dashed", "dotted")) +
+  theme(
+    legend.position = "none"
+  ) +
   scale_color_manual(values=c("red", "black"))
 
 ov16_graph
@@ -115,6 +118,9 @@ ov16_graph_l3 <- ggplot() +
   ggtitle("Ov16 Seroprevalence at midpoint of development to adult") +
   ylim(0, 100) +
   scale_linetype_manual(values=c("dashed", "dotted")) +
+  theme(
+    legend.position = "none"
+  ) +
   scale_color_manual(values=c("red", "black"))
 
 ov16_graph_l3
@@ -127,12 +133,15 @@ ov16_graph_juvy <- ggplot() +
   ggtitle("Ov16 Seroprevalence at upon developing to a juvinile adult") +
   ylim(0, 100) +
   scale_linetype_manual(values=c("dashed", "dotted")) +
+  theme(
+    legend.position = c(2,0.5)
+  ) +
   scale_color_manual(values=c("red", "black"))
 
 ov16_graph_juvy
 
 larvae_graphs <- grid.arrange(ov16_graph, ov16_graph_l3, ov16_graph_juvy, ncol=2)
-ggsave("larvae_graphs.png", larvae_graphs, width=7000, height = 2000, units="px", dpi=600)
+ggsave("larvae_graphs.png", larvae_graphs, width=7000, height = 4000, units="px", dpi=600)
 
 
 #ggsave("ov16_graph.png", ov16_graph, width=3500, height = 2000, units="px", dpi=600)
