@@ -1,3 +1,9 @@
+# start with Gabon - fit the data
+# no treatment in Gabon
+
+
+
+
 library(dplyr)
 library(ggplot2)
 
@@ -100,7 +106,7 @@ ov16_graph <- ggplot() +
   geom_line(aes(x=age_groups, y=ov16_prev*100, color='Post Treatment', linetype=sex), data=tmpDf) +
   xlab("Age") +
   ylab("OV16 Seroprevalence (%)") +
-  ggtitle("Ov16 Seroprevalence upon L3 Exposure") +
+  ggtitle("Ov16 Seroprevalence w/ Mating Worm Pair") +
   ylim(0, 100) +
   scale_linetype_manual(values=c("dashed", "dotted")) +
   scale_color_manual(values=c("red", "black"))
@@ -109,7 +115,7 @@ ov16_graph
 
 
 
-ggsave("ov16_mating.png", ov16_graph, width=3500, height = 2000, units="px", dpi=600)
+ggsave("ov16_mating.png", ov16_graph, width=7000, height = 4000, units="px", dpi=600)
 
 
 mf_prev_graph <- ggplot()  +
