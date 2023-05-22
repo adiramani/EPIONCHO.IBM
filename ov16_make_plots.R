@@ -1,5 +1,6 @@
 library(dplyr)
 library(ggplot2)
+library(gridExtra)
 
 allOutputs <- data.frame(matrix(ncol=13))
 colnames(allOutputs) <- c("age", "sex", "ov16_pos", "ov16_estab", "ov16_juvy", "mf_prev", "age_pre", "sex_pre", "ov16_pos_pre", "ov16_estab_pre", "ov16_juvy_pre", "mf_prev_pre", "run_num")
@@ -46,45 +47,30 @@ for (file in list.files(fileToUse)) {
 
 # viz
 
-allOutputs <- allOutputs %>% filter(!is.na(allOutputs$run_num)) %>% mutate(new_age = round(age/10)*10,
-                                                                           age_groups = case_when(
-                                                                             age < 2 ~ 2,
-                                                                             age < 4 ~ 4,
-                                                                             age < 6 ~ 6,
-                                                                             age < 8 ~ 8,
-                                                                             age < 10 ~ 10,
-                                                                             age < 12 ~ 12,
-                                                                             age < 15 ~ 15,
-                                                                             age < 17 ~ 17,
-                                                                             age < 20 ~ 20,
-                                                                             age < 25 ~ 25,
-                                                                             age < 30 ~ 30,
-                                                                             age < 35 ~ 35,
-                                                                             age < 40 ~ 40,
-                                                                             age < 50 ~ 50,
-                                                                             age < 60 ~ 60,
-                                                                             age < 70 ~ 70,
-                                                                             TRUE ~ 80
-                                                                           ),
-                                                                           age_groups_pre = case_when(
-                                                                             age_pre < 2 ~ 2,
-                                                                             age_pre < 4 ~ 4,
-                                                                             age_pre < 6 ~ 6,
-                                                                             age_pre < 8 ~ 8,
-                                                                             age_pre < 10 ~ 10,
-                                                                             age_pre < 12 ~ 12,
-                                                                             age_pre < 15 ~ 15,
-                                                                             age_pre < 17 ~ 17,
-                                                                             age_pre < 20 ~ 20,
-                                                                             age_pre < 25 ~ 25,
-                                                                             age_pre < 30 ~ 30,
-                                                                             age_pre < 35 ~ 35,
-                                                                             age_pre < 40 ~ 40,
-                                                                             age_pre < 50 ~ 50,
-                                                                             age_pre < 60 ~ 60,
-                                                                             age_pre < 70 ~ 70,
-                                                                             TRUE ~ 80
-                                                                           ))
+tmpAllOutputs <- allOutputs
+
+allOutputs <- tmpAllOutputs %>% mutate(age_groups = case_when(
+                                      age < 20 ~ round(age),
+                                      age < 25 ~ 25,
+                                      age < 30 ~ 30,
+                                      age < 35 ~ 35,
+                                      age < 40 ~ 40,
+                                      age < 50 ~ 50,
+                                      age < 60 ~ 60,
+                                      age < 70 ~ 70,
+                                      TRUE ~ 80
+                                    ),
+                                    age_groups_pre = case_when(
+                                      age_pre < 20 ~ round(age_pre),
+                                      age_pre < 25 ~ 25,
+                                      age_pre < 30 ~ 30,
+                                      age_pre < 35 ~ 35,
+                                      age_pre < 40 ~ 40,
+                                      age_pre < 50 ~ 50,
+                                      age_pre < 60 ~ 60,
+                                      age_pre < 70 ~ 70,
+                                      TRUE ~ 80
+                                    ))
 
 tmpDf <- allOutputs %>% dplyr::group_by(age_groups, sex) %>% dplyr::summarise(ov16_prev=mean(ov16_pos), mf_prev=mean(mf_prev), ov16_estab_prev=mean(ov16_estab), ov16_juvy_prev=mean(ov16_juvy)) %>% as.data.frame() #%>% tidyr::pivot_longer(c(ov16_prev, mf_prev), names_to="treatment", values_to="ov16_prev") %>% as.data.frame()
 tmpDf[(dim(tmpDf)[1]+1),] <- list(0, 'Female', 0, 0, 0, 0)
@@ -96,45 +82,54 @@ tmpDf2[(dim(tmpDf2)[1]+1),] <- list(0, 'Female', 0, 0, 0, 0)
 tmpDf2[(dim(tmpDf2)[1]+1),] <- list(0, 'Male', 0, 0, 0, 0)
 
 ov16_graph <- ggplot() +
-  geom_line(aes(x=age_groups_pre, y=ov16_prev_pre*100, color="Pre Treatment", linetype=sex_pre), data=tmpDf2) +
-  geom_line(aes(x=age_groups, y=ov16_prev*100, color='Post Treatment', linetype=sex), data=tmpDf) +
+  geom_line(aes(x=age_groups_pre, y=ov16_prev_pre*100, color="Pre Treatment", linetype=sex_pre), linewidth=1.2, data=tmpDf2) +
+  geom_line(aes(x=age_groups, y=ov16_prev*100, color='Post Treatment', linetype=sex), linewidth=1.2, data=tmpDf) +
   xlab("Age") +
   ylab("OV16 Seroprevalence (%)") +
   ggtitle("Ov16 Seroprevalence upon L3 Exposure") +
-  ylim(0, 100) +
+  scale_x_continuous(breaks=c(seq(0,20,5), seq(30, 80, 10))) +
+  scale_y_continuous(breaks=seq(0,101,20), limits=c(0, 100)) +
   scale_linetype_manual(values=c("dashed", "dotted")) +
   theme(
-    legend.position = "none"
+    legend.position = "none",
+    axis.text = element_text(size=15),
+    axis.title= element_text(size=15)
   ) +
   scale_color_manual(values=c("red", "black"))
 
 ov16_graph
 
 ov16_graph_l3 <- ggplot() +
-  geom_line(aes(x=age_groups_pre, y=ov16_estab_prev_pre*100, color="Pre Treatment", linetype=sex_pre), data=tmpDf2) +
-  geom_line(aes(x=age_groups, y=ov16_estab_prev*100, color='Post Treatment', linetype=sex), data=tmpDf) +
+  geom_line(aes(x=age_groups_pre, y=ov16_estab_prev_pre*100, color="Pre Treatment", linetype=sex_pre), linewidth=1.2, data=tmpDf2) +
+  geom_line(aes(x=age_groups, y=ov16_estab_prev*100, color='Post Treatment', linetype=sex), linewidth=1.2, data=tmpDf) +
   xlab("Age") +
   ylab("OV16 Seroprevalence (%)") +
   ggtitle("Ov16 Seroprevalence at midpoint of development to adult") +
-  ylim(0, 100) +
+  scale_x_continuous(breaks=c(seq(0,20,5), seq(30, 80, 10))) +
+  scale_y_continuous(breaks=seq(0,101,20), limits=c(0, 100)) +
   scale_linetype_manual(values=c("dashed", "dotted")) +
   theme(
-    legend.position = "none"
+    legend.position = "none",
+    axis.text = element_text(size=15),
+    axis.title= element_text(size=15)
   ) +
   scale_color_manual(values=c("red", "black"))
 
 ov16_graph_l3
 
 ov16_graph_juvy <- ggplot() +
-  geom_line(aes(x=age_groups_pre, y=ov16_juvy_prev_pre*100, color="Pre Treatment", linetype=sex_pre), data=tmpDf2) +
-  geom_line(aes(x=age_groups, y=ov16_juvy_prev*100, color='Post Treatment', linetype=sex), data=tmpDf) +
+  geom_line(aes(x=age_groups_pre, y=ov16_juvy_prev_pre*100, color="Pre Treatment", linetype=sex_pre), linewidth=1.2, data=tmpDf2) +
+  geom_line(aes(x=age_groups, y=ov16_juvy_prev*100, color='Post Treatment', linetype=sex), linewidth=1.2, data=tmpDf) +
   xlab("Age") +
   ylab("OV16 Seroprevalence (%)") +
   ggtitle("Ov16 Seroprevalence at upon developing to a juvinile adult") +
-  ylim(0, 100) +
+  scale_x_continuous(breaks=c(seq(0,20,5), seq(30, 80, 10))) +
+  scale_y_continuous(breaks=seq(0,101,20), limits=c(0, 100)) +
   scale_linetype_manual(values=c("dashed", "dotted")) +
   theme(
-    legend.position = c(2,0.5)
+    legend.position = "none",
+    axis.text = element_text(size=15),
+    axis.title= element_text(size=15)
   ) +
   scale_color_manual(values=c("red", "black"))
 
