@@ -68,7 +68,8 @@ ep.equi.sim <- function(time.its,
                         print_progress = TRUE,
                         epilepsy_module = "NO",
                         OAE_equilibrium,
-                        calc_ov16=FALSE)
+                        calc_ov16=FALSE,
+                        ov16_equilibrium=NA)
 
 
 {
@@ -119,7 +120,7 @@ ep.equi.sim <- function(time.its,
   g = 0.0096
   a.v = 0.39
   real.max.age = 80 #no humans live longer than 80 years
-  N = 440 #human population size
+  N = 500 #human population size
   mean.age = 50 #mean human age (before truncation)
   int.L3 = 0.03; int.L2 = 0.03; int.L1 = 0.03
   lambda.zero = 0.33 # (matt:) per-capita rate that female worms lose their fertility (W_FF) & return to non-fertile state (W_FN)
@@ -214,6 +215,11 @@ ep.equi.sim <- function(time.its,
 
   #DT not relevent here because RK4 is used to calculate change in mf
   mort.rates.mf <- weibull.mortality(DT = 1, par1 = mu.mf1, par2 = mu.mf2, age.cats = age.cats.mf)
+
+
+  Ov16_Seropositive <- c()
+  mf_indv_prev <- c()
+  prev_Ov16 <- 0
 
   # ========================================================================================================== #
   # create inital age distribution and simulate stable age distribution (where equilibrium input not provided) #
@@ -320,6 +326,14 @@ ep.equi.sim <- function(time.its,
 
       OAE_probs <- OAE_mfcount_prob_func(dat = Chesnais_dat)
     }
+    if(calc_ov16) {
+      Ov16_Seropositive <- rep(0, N)
+      mf_indv_prev <- rep(0, N)
+
+      # 80% of pop is able to mount Antibody response to Ov16
+      susc_Ov16 <- rbinom(N, 1, 0.8)#rep(c(1,1,1,1,1,1,1,1,0,0), N*0.1)
+      all.mats.temp[,num.cols+ov16.col] <- susc_Ov16
+    }
   }
 
   # =============================================================================================#
@@ -417,17 +431,14 @@ ep.equi.sim <- function(time.its,
 
     }
 
-  }
+    if(calc_ov16) {
+      #if(is.na(any(ov16_equilibrium))) {stop('ov16 equilibrium condition does not exist')}
+      Ov16_Seropositive <- ov16_equilibrium$ov16_seropositive
+      mf_indv_prev <- ov16_equilibrium$mf_indv_prev
 
-  if(calc_ov16) {
-    Ov16_Seropositive <- rep(0, N)
-    mf_indv_prev <- rep(0, N)
+      prev_Ov16 <- sum(Ov16_Seropositive)/N
+    }
 
-    # 80% of pop is able to mount Antibody response to Ov16
-    susc_Ov16 <- rep(c(1,1,1,1,1,1,1,1,0,0), N*0.1)
-    all.mats.temp[,num.cols+ov16.col] <- susc_Ov16
-
-    prev_Ov16 <- 0
   }
 
   i <- 1
@@ -613,10 +624,8 @@ ep.equi.sim <- function(time.its,
       all.mats.temp[, (6 + num.mf.comps + num.comps.worm + k)] <- res[[3]] # infertile, num.comps.worm skips over males
       all.mats.temp[, (6 + num.mf.comps + 2*num.comps.worm + k)] <- res[[4]] # fertile, num.comps.worm skips over males and infertile females
 
-
+      if(give.treat == 1 & i >= treat.start & k == num.comps.worm) {treat.vec.in <- res[[7]]} #treated individuals
     }
-
-    if(give.treat == 1 & i >= treat.start) {treat.vec.in <- res[[7]]} #treated individuals
 
     for(mf.c in 1 : num.mf.comps)
 
@@ -717,13 +726,13 @@ ep.equi.sim <- function(time.its,
 
     #ov16_sero
     if(calc_ov16) {
-      female_L5 <- all.mats.temp[, nfw.start]
-      male_L5 <- all.mats.temp[, worms.start]
+      any_juvy_worms <- ((all.mats.temp[, worms.start] > 0) | (all.mats.temp[, nfw.start] > 0) | (all.mats.temp[, nfw.start+num.comps.worm] > 0))
+      indv_antibody_response <- all.mats.temp[,91]
 
-      new_inf_Ov16 <- which((male_L5 > 0 | female_L5 > 0) & Ov16_Seropositive == 0 & all.mats.temp[,91] == 1)
+      new_inf_Ov16 <- which(any_juvy_worms == TRUE & Ov16_Seropositive == 0 & indv_antibody_response == 1)
       Ov16_Seropositive[new_inf_Ov16] <- 1
 
-      mf_indv_prev <- as.integer(temp.mf[[2]] > 0) #as.integer(mf.temp > 0)
+      mf_indv_prev <- as.integer(temp.mf[[2]] > 0)
       prev_Ov16 <- c(prev_Ov16, sum(Ov16_Seropositive)/N)
     }
 
@@ -752,6 +761,7 @@ ep.equi.sim <- function(time.its,
       all.mats.temp[to.die, 3] <- rbinom(length(to.die), 1, 0.5) #draw sex
 
       if(calc_ov16) {
+        all.mats.temp[to.die, num.cols+ov16.col] <- rbinom(length(to.die), 1, 0.8)
         Ov16_Seropositive[to.die] <- 0
         mf_indv_prev[to.die] <- 0
       }
@@ -826,6 +836,13 @@ ep.equi.sim <- function(time.its,
     {
       outp <- list(prev, mean.mf.per.snip, L3_vec, list(all.mats.temp, ex.vec, treat.vec.in, l.extras, mf.delay, l1.delay, ABR, exposure.delay), ABR_recorded, coverage.recorded)
       names(outp) <- c('mf_prev', 'mf_intens', 'L3', 'all_equilibrium_outputs', 'ABR_recorded', 'coverage.recorded')
+      if(calc_ov16) {
+        ov16_equilibrium_outputs <- list(Ov16_Seropositive, mf_indv_prev)
+        names(ov16_equilibrium_outputs) <- c('ov16_seropositive', 'mf_indv_prev')
+        ov16_output <- list(ov16_equilibrium_outputs)
+        names(ov16_output) <- c('ov16_equilibrium')
+        outp <- append(outp, ov16_output)
+      }
       return(outp)
     }
 

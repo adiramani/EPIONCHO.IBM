@@ -9,12 +9,12 @@
 #' @param N human population size (default = 400).
 #'
 #' @return matrix of individuals to be treated (?)
-os.cov <- function(all.dt, pncomp, covrg, N)
+os.cov <- function(all.dt, pncomp, covrg, N, min.cov.age = 5)
 
 {
   pop.ages <- all.dt[,2] #age of each individual in population
 
-  iny <- which(pop.ages < 5 | all.dt[,1] == 1)
+  iny <- which(pop.ages < min.cov.age | all.dt[,1] == 1)
 
   nc.age <- length(iny) / length(pop.ages)
 

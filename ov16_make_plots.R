@@ -1,10 +1,19 @@
+# fit to gabon - no treatment
+# Mali - bakoye - pre-control, history of intervention (20-24 years) - RDT losing sens
+# TOGO - have MF data - identify the villages, find pre-control, history of intervention, see what we have when we look at ov16
+# change ABR to match MFP
+# make a presentation
+# Sampling biting
+# sigmoidicity
+# catalytic model
+
 library(dplyr)
 library(ggplot2)
 
 allOutputs <- data.frame(matrix(ncol=9))
 colnames(allOutputs) <- c("age", "sex", "ov16_pos", "mf_prev", "age_pre", "sex_pre", "ov16_pos_pre", "mf_prev_pre", "run_num")
 
-files <- c('ov16_output_1/', 'ov16_output_l3/', 'ov16_output_l3_2/', 'ov16_output_l3_3/')
+files <- c('ov16_output_any_worm_11/', 'ov16_output_l3/', 'ov16_output_l3_2/', 'ov16_output_l3_3/')
 fileToUse <- paste("data/", files[1], sep="")
 
 i <- 1
@@ -20,7 +29,7 @@ for (file in list.files(fileToUse)) {
 
   mf_prev <- tmpRDSData$mf_indv_prevalence
 
-  mf_prev_pre <- tmpRDSData$mf_indv_prevalence_pre_treatment
+  mf_prev_pre <- rep(0, 500)#tmpRDSData$mf_indv_prevalence_pre_treatment
 
   ov16_seropos <- tmpRDSData$ov16_seropositive
 
@@ -34,48 +43,32 @@ for (file in list.files(fileToUse)) {
   i <- i + 1
 }
 
+tmpAllOutputs <- allOutputs
 
 # viz
 
-allOutputs <- allOutputs %>% filter(!is.na(allOutputs$run_num)) %>% mutate(new_age = round(age/10)*10,
-                                                                           age_groups = case_when(
-                                                                             age < 2 ~ 2,
-                                                                             age < 4 ~ 4,
-                                                                             age < 6 ~ 6,
-                                                                             age < 8 ~ 8,
-                                                                             age < 10 ~ 10,
-                                                                             age < 12 ~ 12,
-                                                                             age < 15 ~ 15,
-                                                                             age < 17 ~ 17,
-                                                                             age < 20 ~ 20,
-                                                                             age < 25 ~ 25,
-                                                                             age < 30 ~ 30,
-                                                                             age < 35 ~ 35,
-                                                                             age < 40 ~ 40,
-                                                                             age < 50 ~ 50,
-                                                                             age < 60 ~ 60,
-                                                                             age < 70 ~ 70,
-                                                                             TRUE ~ 80
-                                                                           ),
-                                                                           age_groups_pre = case_when(
-                                                                             age_pre < 2 ~ 2,
-                                                                             age_pre < 4 ~ 4,
-                                                                             age_pre < 6 ~ 6,
-                                                                             age_pre < 8 ~ 8,
-                                                                             age_pre < 10 ~ 10,
-                                                                             age_pre < 12 ~ 12,
-                                                                             age_pre < 15 ~ 15,
-                                                                             age_pre < 17 ~ 17,
-                                                                             age_pre < 20 ~ 20,
-                                                                             age_pre < 25 ~ 25,
-                                                                             age_pre < 30 ~ 30,
-                                                                             age_pre < 35 ~ 35,
-                                                                             age_pre < 40 ~ 40,
-                                                                             age_pre < 50 ~ 50,
-                                                                             age_pre < 60 ~ 60,
-                                                                             age_pre < 70 ~ 70,
-                                                                             TRUE ~ 80
-                                                                           ))
+allOutputs <- tmpAllOutputs %>% mutate(age_groups = case_when(
+                                        age < 20 ~ round(age),
+                                       age < 25 ~ 25,
+                                       age < 30 ~ 30,
+                                       age < 35 ~ 35,
+                                       age < 40 ~ 40,
+                                       age < 50 ~ 50,
+                                       age < 60 ~ 60,
+                                       age < 70 ~ 70,
+                                       TRUE ~ 80
+                                       ),
+                                       age_groups_pre = case_when(
+                                         age_pre < 20 ~ round(age_pre),
+                                         age_pre < 25 ~ 25,
+                                         age_pre < 30 ~ 30,
+                                         age_pre < 35 ~ 35,
+                                         age_pre < 40 ~ 40,
+                                         age_pre < 50 ~ 50,
+                                         age_pre < 60 ~ 60,
+                                         age_pre < 70 ~ 70,
+                                         TRUE ~ 80
+                                       ))
 
 tmpDf <- allOutputs %>% dplyr::group_by(age_groups, sex) %>% dplyr::summarise(ov16_prev=mean(ov16_pos), mf_prev=mean(mf_prev)) %>% as.data.frame() #%>% tidyr::pivot_longer(c(ov16_prev, mf_prev), names_to="treatment", values_to="ov16_prev") %>% as.data.frame()
 tmpDf[(dim(tmpDf)[1]+1),] <- list(0, 'Female', 0, 0)
@@ -83,14 +76,16 @@ tmpDf[(dim(tmpDf)[1]+1),] <- list(0, 'Male', 0, 0)
 
 
 tmpDf2 <- allOutputs %>% dplyr::group_by(age_groups_pre, sex_pre) %>% dplyr::summarise(ov16_prev_pre=mean(ov16_pos_pre), mf_prev_pre=mean(mf_prev_pre)) %>% as.data.frame() #%>% tidyr::pivot_longer(c(mf_prev, mf_prev_pre), names_to="treatment", values_to="mf_prev") %>% as.data.frame()
-tmpDf2[(dim(tmpDf2)[1]+1),] <- list(0, 'Female', 0, 0)
-tmpDf2[(dim(tmpDf2)[1]+1),] <- list(0, 'Male', 0, 0)
+#tmpDf2[(dim(tmpDf2)[1]+1),] <- list(0, 'Female', 0, 0)
+#tmpDf2[(dim(tmpDf2)[1]+1),] <- list(0, 'Male', 0, 0)
 
 
 ov16_graph <- ggplot() +
-  geom_line(aes(x=age_groups_pre, y=ov16_prev_pre*100, color="Pre Treatment", linetype=sex_pre), data=tmpDf2) +
-  geom_line(aes(x=age_groups, y=ov16_prev*100, color='Post Treatment', linetype=sex), data=tmpDf) +
+  geom_line(aes(x=age_groups_pre, y=ov16_prev_pre*100, color="Pre Treatment", linetype=sex_pre), linewidth=1.5, data=tmpDf2) +
+  geom_line(aes(x=age_groups, y=ov16_prev*100, color='Post Treatment', linetype=sex), linewidth=1.5, data=tmpDf) +
   xlab("Age") +
+  scale_x_continuous(breaks=seq(0,81,5)) +
+  scale_y_continuous(breaks=seq(0,100,10)) +
   ylab("OV16 Seroprevalence (%)") +
   ylim(0, 100) +
   scale_linetype_manual(values=c("dashed", "dotted")) +
@@ -99,7 +94,9 @@ ov16_graph <- ggplot() +
 
 ov16_graph
 
-ggsave("ov16_any_adult_worm_graph.png", ov16_graph, width=7000, height = 4000, units="px", dpi=600)
+
+
+ggsave("ov16_any_adult_worm_graph_2.png", ov16_graph, width=4000, height = 4000, units="px", dpi=600)
 
 mf_prev_graph <- ggplot()  +
   theme(
