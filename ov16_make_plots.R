@@ -92,7 +92,12 @@ ov16_graph <- ggplot() +
   scale_linetype_manual(values=c("dashed", "dotted")) +
   theme(
     legend.position = "none",
-    axis.text = element_text(size=15),
+    panel.grid = element_blank(),
+    panel.grid.major.x = element_line( linewidth=.15, color=rgb(0, 0, 0, 40, maxColorValue=255)),
+    panel.grid.major.y = element_line( linewidth=.15, color=rgb(0, 0, 0, 40, maxColorValue=255)),
+    panel.background = element_rect(fill = 'white', colour = 'black'),
+    text=element_text(size=15),
+    axis.text = element_text(size=20),
     axis.title= element_text(size=15)
   ) +
   scale_color_manual(values=c("red", "black"))
@@ -110,7 +115,12 @@ ov16_graph_l3 <- ggplot() +
   scale_linetype_manual(values=c("dashed", "dotted")) +
   theme(
     legend.position = "none",
-    axis.text = element_text(size=15),
+    panel.grid = element_blank(),
+    panel.grid.major.x = element_line( linewidth=.15, color=rgb(0, 0, 0, 40, maxColorValue=255)),
+    panel.grid.major.y = element_line( linewidth=.15, color=rgb(0, 0, 0, 40, maxColorValue=255)),
+    panel.background = element_rect(fill = 'white', colour = 'black'),
+    text=element_text(size=15),
+    axis.text = element_text(size=20),
     axis.title= element_text(size=15)
   ) +
   scale_color_manual(values=c("red", "black"))
@@ -122,21 +132,25 @@ ov16_graph_juvy <- ggplot() +
   geom_line(aes(x=age_groups, y=ov16_juvy_prev*100, color='Post Treatment', linetype=sex), linewidth=1.2, data=tmpDf) +
   xlab("Age") +
   ylab("OV16 Seroprevalence (%)") +
-  ggtitle("Ov16 Seroprevalence at upon developing to a juvinile adult") +
+  ggtitle("Ov16 Seroprevalence with any juvinile worm (original)") +#at upon developing to a juvinile adult") +
   scale_x_continuous(breaks=c(seq(0,20,5), seq(30, 80, 10))) +
   scale_y_continuous(breaks=seq(0,101,20), limits=c(0, 100)) +
   scale_linetype_manual(values=c("dashed", "dotted")) +
   theme(
-    legend.position = "none",
-    axis.text = element_text(size=15),
+    panel.grid = element_blank(),
+    panel.grid.major.x = element_line( linewidth=.15, color=rgb(0, 0, 0, 40, maxColorValue=255)),
+    panel.grid.major.y = element_line( linewidth=.15, color=rgb(0, 0, 0, 40, maxColorValue=255)),
+    panel.background = element_rect(fill = 'white', colour = 'black'),
+    text=element_text(size=15),
+    axis.text = element_text(size=20),
     axis.title= element_text(size=15)
   ) +
   scale_color_manual(values=c("red", "black"))
 
 ov16_graph_juvy
 
-larvae_graphs <- grid.arrange(ov16_graph, ov16_graph_l3, ov16_graph_juvy, ncol=2)
-ggsave("larvae_graphs.png", larvae_graphs, width=7000, height = 4000, units="px", dpi=600)
+larvae_graphs <- grid.arrange(ov16_graph, ov16_graph_l3, ov16_graph_juvy, ncol=1)
+ggsave("larvae_graphs.png", larvae_graphs, width=7000, height = 5000, units="px", dpi=600)
 
 
 #ggsave("ov16_graph.png", ov16_graph, width=3500, height = 2000, units="px", dpi=600)
