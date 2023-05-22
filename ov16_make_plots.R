@@ -81,13 +81,14 @@ tmpDf2 <- allOutputs %>% dplyr::group_by(age_groups_pre, sex_pre) %>% dplyr::sum
 
 
 ov16_graph <- ggplot() +
-  geom_line(aes(x=age_groups_pre, y=ov16_prev_pre*100, color="Pre Treatment", linetype=sex_pre), linewidth=1.5, data=tmpDf2) +
-  geom_line(aes(x=age_groups, y=ov16_prev*100, color='Post Treatment', linetype=sex), linewidth=1.5, data=tmpDf) +
+  geom_line(aes(x=age_groups_pre, y=ov16_prev_pre*100, color="Pre Treatment", linetype=sex_pre), linewidth=1.2, data=tmpDf2) +
+  geom_line(aes(x=age_groups, y=ov16_prev*100, color='Post Treatment', linetype=sex), linewidth=1.2, data=tmpDf) +
   xlab("Age") +
-  scale_x_continuous(breaks=seq(0,81,5)) +
-  scale_y_continuous(breaks=seq(0,100,10)) +
   ylab("OV16 Seroprevalence (%)") +
-  ylim(0, 100) +
+  scale_x_continuous(breaks=c(seq(0,20,5), seq(30, 80, 10))) +
+  theme(axis.text = element_text(size=15),
+        axis.title= element_text(size=15)) +
+  scale_y_continuous(breaks=seq(0,101,20), limits=c(0, 100)) +
   scale_linetype_manual(values=c("dashed", "dotted")) +
   ggtitle("Ov16 Seroprevalence Any Adult Worm") +
   scale_color_manual(values=c("red", "black"))
@@ -96,7 +97,7 @@ ov16_graph
 
 
 
-ggsave("ov16_any_adult_worm_graph_2.png", ov16_graph, width=4000, height = 4000, units="px", dpi=600)
+ggsave("ov16_any_adult_worm_graph_2.png", ov16_graph, width=5000, height = 4000, units="px", dpi=600)
 
 mf_prev_graph <- ggplot()  +
   theme(
@@ -105,11 +106,13 @@ mf_prev_graph <- ggplot()  +
     panel.grid.major.y = element_line( linewidth=.1, color=rgb(0, 0, 0, 20, maxColorValue=255)),
     panel.background = element_rect(fill = 'white', colour = 'black')
   ) +
-  geom_line(aes(x=age_groups_pre, y=mf_prev_pre*100, color='Pre Treatment', linetype=sex_pre), data=tmpDf2) +
-  geom_line(aes(x=age_groups, y=mf_prev*100, color='Post Treatment', linetype=sex), data=tmpDf) +
+  geom_line(aes(x=age_groups_pre, y=mf_prev_pre*100, color='Pre Treatment', linetype=sex_pre), linewidth=1.2, data=tmpDf2) +
+  geom_line(aes(x=age_groups, y=mf_prev*100, color='Post Treatment', linetype=sex), linewidth=1.2, data=tmpDf) +
   xlab("Age") +
   ylab("mf prevalence (%)") +
   ylim(0, 100) +
+  scale_x_continuous(seq(0, 81, 5)) +
+  scale_y_continuous(seq(0, 101, 20)) +
   scale_linetype_manual(values=c("dashed", "dotted")) +
   scale_color_manual(values=c("red", "black"))
 mf_prev_graph
