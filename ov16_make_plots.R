@@ -86,11 +86,17 @@ ov16_graph <- ggplot() +
   xlab("Age") +
   ylab("OV16 Seroprevalence (%)") +
   scale_x_continuous(breaks=c(seq(0,20,5), seq(30, 80, 10))) +
-  theme(axis.text = element_text(size=15),
-        axis.title= element_text(size=15)) +
+  theme(
+    panel.grid = element_blank(),
+    panel.grid.major.x = element_line( linewidth=.15, color=rgb(0, 0, 0, 40, maxColorValue=255)),
+    panel.grid.major.y = element_line( linewidth=.15, color=rgb(0, 0, 0, 40, maxColorValue=255)),
+    panel.background = element_rect(fill = 'white', colour = 'black'),
+    text=element_text(size=15),
+    axis.text = element_text(size=20),
+    axis.title= element_text(size=15)) +
   scale_y_continuous(breaks=seq(0,101,20), limits=c(0, 100)) +
   scale_linetype_manual(values=c("dashed", "dotted")) +
-  ggtitle("Ov16 Seroprevalence Any Adult Worm") +
+  ggtitle("Ov16 Seroprevalence Any Established Worm") +
   scale_color_manual(values=c("red", "black"))
 
 ov16_graph
