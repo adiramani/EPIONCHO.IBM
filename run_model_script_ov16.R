@@ -20,9 +20,9 @@ colnames(allOutputs) <- c("age", "sex", "ov16_pos", "mf_prev", "age_pre", "sex_p
 #---- Single Run ------#
 
 DT.in <- 1/366
-timesteps = 50
+timesteps = 5
 give.treat.in = 0; treat.strt = 1; treat.stp = 2; trt.int = 1
-ABR.in <- 1400
+ABR.in <- 1500
 
 output_equilibrium <-  ep.equi.sim(time.its = timesteps,
                        ABR = ABR.in,
@@ -34,8 +34,8 @@ output_equilibrium <-  ep.equi.sim(time.its = timesteps,
                        pnc = 0.01,
                        min.mont.age = 5,
                        vector.control.strt = NA,
-                       delta.hz.in = 0.186,
-                       delta.hinf.in = 0.003,
+                       delta.hz.in = 0.0031,
+                       delta.hinf.in = 0.002772749,
                        c.h.in = 0.005,
                        gam.dis.in = 0.3,
                        run_equilibrium=TRUE,
@@ -47,7 +47,7 @@ print(table(round(output_equilibrium$mf_prev)))
 
 # Now add treatment
 
-treat.len = 18; treat.strt.yrs = 2; yrs.post.treat = 0
+treat.len = 18; treat.strt.yrs = 2; yrs.post.treat = 2
 
 treat.strt = treat.strt.yrs; treat.stp = treat.strt + treat.len
 timesteps = treat.stp + yrs.post.treat #final duration

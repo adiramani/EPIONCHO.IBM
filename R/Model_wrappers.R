@@ -69,7 +69,9 @@ ep.equi.sim <- function(time.its,
                         epilepsy_module = "NO",
                         OAE_equilibrium,
                         calc_ov16=FALSE,
-                        ov16_equilibrium=NA)
+                        ov16_equilibrium=NA,
+                        ov16_store_times = c(),
+                        no_prev_run=FALSE)
 
 
 {
@@ -83,12 +85,16 @@ ep.equi.sim <- function(time.its,
   # {times.of.treat.in <- seq(treat.start, treat.stop - (treat.int / DT), treat.int / DT)}
   # else {times.of.treat.in <- 0}
 
+
   if(give.treat == 1)
   {
     treat.stop <- round(treat.stop / (DT))
     if(treat.start >= 1) {treat.start <-  round( (treat.start) / (DT)) + 1}
     if(treat.start == 0) {treat.start <-  1}
+    ov16_store_times <- c(treat.start-1, treat.stop-(1/DT)+1, treat.stop, treat.stop+1, treat.stop+(0.5/DT), treat.stop+(1/DT)+1)
   }
+  print("Sero Store Times")
+  print(ov16_store_times)
 
   # vector control #
   if(!is.na(vector.control.strt)){
@@ -216,14 +222,9 @@ ep.equi.sim <- function(time.its,
   #DT not relevent here because RK4 is used to calculate change in mf
   mort.rates.mf <- weibull.mortality(DT = 1, par1 = mu.mf1, par2 = mu.mf2, age.cats = age.cats.mf)
 
-
-  Ov16_Seropositive <- c()
-  mf_indv_prev <- c()
-  prev_Ov16 <- 0
-
   # ========================================================================================================== #
   # create inital age distribution and simulate stable age distribution (where equilibrium input not provided) #
-  if(isTRUE(run_equilibrium)){
+  if(isTRUE(run_equilibrium) | no_prev_run){
     cur.age <- rep(0, N)
 
     #(the approach below must be used, drawing human lifespans from an exponential distribution eventually leads to a non-exponential distribution)
@@ -330,15 +331,21 @@ ep.equi.sim <- function(time.its,
       Ov16_Seropositive <- rep(0, N)
       mf_indv_prev <- rep(0, N)
 
+
+      Ov16_Seropositive_matrix <- matrix(0, nrow=N, ncol=length(ov16_store_times)*3)
+      mf_indv_prev_matrix <- matrix(0, nrow=N, ncol=length(ov16_store_times)*3)
+      matrix_index <- 1
+
+      prev_Ov16 <- 0
+
       # 80% of pop is able to mount Antibody response to Ov16
-      susc_Ov16 <- rbinom(N, 1, 0.8)#rep(c(1,1,1,1,1,1,1,1,0,0), N*0.1)
-      all.mats.temp[,num.cols+ov16.col] <- susc_Ov16
+      all.mats.temp[,num.cols+ov16.col] <- sample(rep(c(1,1,1,1,1,1,1,1,0,0), N*0.1), N)
     }
   }
 
   # =============================================================================================#
   # set-up main structures for tracking human/parasite stages if equilibrium dataframe given     #
-  if(isFALSE(run_equilibrium))
+  if(isFALSE(run_equilibrium) & !no_prev_run)
 
   {
     if(is.list(equilibrium) == FALSE) stop('equilibrium condition not in correct format')
@@ -432,11 +439,14 @@ ep.equi.sim <- function(time.its,
     }
 
     if(calc_ov16) {
-      #if(is.na(any(ov16_equilibrium))) {stop('ov16 equilibrium condition does not exist')}
       Ov16_Seropositive <- ov16_equilibrium$ov16_seropositive
       mf_indv_prev <- ov16_equilibrium$mf_indv_prev
 
       prev_Ov16 <- sum(Ov16_Seropositive)/N
+
+      Ov16_Seropositive_matrix <- matrix(0, nrow=N, ncol=length(ov16_store_times)*3)
+      mf_indv_prev_matrix <- matrix(0, nrow=N, ncol=length(ov16_store_times)*3)
+      matrix_index <- 1
     }
 
   }
@@ -726,7 +736,7 @@ ep.equi.sim <- function(time.its,
 
     #ov16_sero
     if(calc_ov16) {
-      any_juvy_worms <- ((all.mats.temp[, worms.start] > 0) | (all.mats.temp[, nfw.start] > 0) | (all.mats.temp[, nfw.start+num.comps.worm] > 0))
+      any_juvy_worms <- (rowSums(all.mats.temp[, worms.start:num.cols]) > 0)# | (all.mats.temp[, nfw.start] > 0) | (all.mats.temp[, nfw.start+num.comps.worm] > 0))
       indv_antibody_response <- all.mats.temp[,91]
 
       new_inf_Ov16 <- which(any_juvy_worms == TRUE & Ov16_Seropositive == 0 & indv_antibody_response == 1)
@@ -761,7 +771,6 @@ ep.equi.sim <- function(time.its,
       all.mats.temp[to.die, 3] <- rbinom(length(to.die), 1, 0.5) #draw sex
 
       if(calc_ov16) {
-        all.mats.temp[to.die, num.cols+ov16.col] <- rbinom(length(to.die), 1, 0.8)
         Ov16_Seropositive[to.die] <- 0
         mf_indv_prev[to.die] <- 0
       }
@@ -778,6 +787,18 @@ ep.equi.sim <- function(time.its,
 
       }
 
+    }
+    if(calc_ov16 & give.treat==1 & !is.na(match(i, ov16_store_times))) {
+      print("Putting in matrix")
+      Ov16_Seropositive_matrix[,3*matrix_index-2] <- all.mats.temp[,2]
+      Ov16_Seropositive_matrix[,3*matrix_index-1] <- all.mats.temp[,3]
+      Ov16_Seropositive_matrix[,3*matrix_index] <- Ov16_Seropositive
+
+      mf_indv_prev_matrix[,3*matrix_index-2] <- all.mats.temp[,2]
+      mf_indv_prev_matrix[,3*matrix_index-1] <- all.mats.temp[,3]
+      mf_indv_prev_matrix[,3*matrix_index] <- as.integer(temp.mf[[2]] > 0)
+
+      matrix_index <- matrix_index + 1
     }
 
 
@@ -852,8 +873,8 @@ ep.equi.sim <- function(time.its,
       outp <- list(prev, mean.mf.per.snip, L3_vec, ABR, all.mats.temp, ABR_recorded, coverage.recorded)
       names(outp) <-  c('mf_prev', 'mf_intens', 'L3', 'ABR', 'all_infection_burdens', 'ABR_recorded', 'coverage.recorded')
       if(calc_ov16) {
-        ov16_output <- list(Ov16_Seropositive, mf_indv_prev, Ov16_Seropositive_pre_treat, mf_indv_prev_pre_treat, all.mats.temp_pre_treat)
-        names(ov16_output) <- c('ov16_seropositive', 'mf_indv_prevalence', 'ov16_seropositive_pre_treatment', 'mf_indv_prevalence_pre_treatment', 'all_infection_burdens_pre_treatment')
+        ov16_output <- list(Ov16_Seropositive, mf_indv_prev, Ov16_Seropositive_pre_treat, mf_indv_prev_pre_treat, all.mats.temp_pre_treat, Ov16_Seropositive_matrix, mf_indv_prev_matrix)
+        names(ov16_output) <- c('ov16_seropositive', 'mf_indv_prevalence', 'ov16_seropositive_pre_treatment', 'mf_indv_prevalence_pre_treatment', 'all_infection_burdens_pre_treatment', 'ov16_seropositive_matrix', 'mf_indv_prev_matrix')
         outp <- append(outp, ov16_output)
       }
       return(outp)
