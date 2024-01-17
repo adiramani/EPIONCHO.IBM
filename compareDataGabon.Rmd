@@ -350,8 +350,8 @@ if(simulateRDT) {
 ```{r init_sim_data_elisa, timeit=TRUE}
 # ov16_gabon_4 = rdt dataset (7.7% mfp), ov16_gabon_k_2_mfp_5_5 = elisa dataset (5.5% mfp), both k=0.2
 # ov16_gabon_k_3_mfp_5
-# 
-simulatedGabonData_elisa <- processRCSFiles("ov16_gabon_k_3_mfp_5/", verbose=FALSE)
+# ov16_gabon_k_3_mounted_response_hyp_mfp_5 - 100% of ppl can mount response
+simulatedGabonData_elisa <- processRCSFiles("ov16_gabon_k_3_mounted_response_hyp_mfp_5/", verbose=FALSE)
 
 simulatedGabonData_elisa$abr_vs_mf_prev
 
@@ -406,6 +406,18 @@ data.frame(a=simulatedGabonData_elisa_sero_no_inf$abr_vals, b=simulatedGabonData
 summarizeSimulatedGabon_elisa_sero_no_inf <- simulatedGabonData_elisa_sero_no_inf$allOutputs
 
 simulation_summary_elisa_sero_no_inf <- summarizeSimulationData(summarizeSimulatedGabon_elisa_sero_no_inf, groupBySex=FALSE)
+
+# serorevert with no infection k3
+simulatedGabonData_elisa_sero_no_inf_k3 <- processRCSFiles("ov16_gabon_seroreversion_3_k_3/", verbose=FALSE)
+
+simulatedGabonData_elisa_sero_no_inf_k3$abr_vs_mf_prev
+
+data.frame(a=simulatedGabonData_elisa_sero_no_inf_k3$abr_vals, b=simulatedGabonData_elisa_sero_no_inf_k3$mf_prev) %>% group_by(a) %>% summarise(mean(b), n(), .groups="drop")
+
+summarizeSimulatedGabon_elisa_sero_no_inf_k3 <- simulatedGabonData_elisa_sero_no_inf_k3$allOutputs
+
+simulation_summary_elisa_sero_no_inf_k3 <- summarizeSimulationData(summarizeSimulatedGabon_elisa_sero_no_inf_k3, groupBySex=FALSE)
+
 
 simulatedGabonData_elisa_k2$allOutputs %>% group_by(run_num) %>% summarise(mean_mf_prev=mean(mf_prev), mf_lb=wilson.ci(sum(mf_prev), n())[1], mf_ub=wilson.ci(sum(mf_prev), n())[2], .groups="drop") %>% as.data.frame() %>% summarise(mean_mf_prev=mean(mean_mf_prev), mf_lb=mean(mf_lb), mf_ub=mean(mf_ub)) 
 
@@ -629,6 +641,8 @@ simulation_summary_sens_spec_elisa_sero_trigger <- summarizeSimulationData(summa
 
 simulation_summary_sens_spec_elisa_sero_no_inf <- summarizeSimulationData(summarizeSimulatedGabon_elisa_sero_no_inf, elisa_sens_spec_vec, groupBySex=FALSE)
 
+simulation_summary_sens_spec_elisa_sero_no_inf_k3 <- summarizeSimulationData(summarizeSimulatedGabon_elisa_sero_no_inf_k3, elisa_sens_spec_vec, groupBySex=FALSE)
+
 if(simulateRDT) {
   #rdt_sens_spec_vec <- as.vector(unlist(gabon_rdt_sens_spec))
   sex_split_simulation_summary_sens_spec_rdt <- summarizeSimulationData(summarizeSimulatedGabon_rdt, gabon_rdt_sens_spec, sensAgeGroup=sensAgeGroup)
@@ -823,14 +837,14 @@ make_adjusted_plot <- function(df1, df2, compValLabel, compVal1, compVal2, df3, 
   
   
   df2$Hypothesis <- factor(df2$Hypothesis, levels = c("L3 exposure", "L4-L5 moult", "Any worm", "Mating worm pair", "Mating worm pair with any mf", "Mating worm pair with detectable mf"), ordered=TRUE)
-  color_vals <- c("L3 exposure"="green", "L4-L5 moult"="blue", "Any worm"="red", "Mating worm pair"="red", "Mating worm pair with any mf"="green", "Mating worm pair with detectable mf"="blue")
-  
+  #color_vals <- c("L3 exposure"="green", "L4-L5 moult"="blue", "Any worm"="red", "Mating worm pair"="red", "Mating worm pair with any mf"="green", "Mating worm pair with detectable mf"="blue")
+   color_vals <- c("Actual Data"="black", "Any worm"="blue", "L3 exposure"="purple", "L4-L5 moult"="#6366f2", "Mating worm pair"="brown", "Mating worm pair with any mf"="red", "Mating worm pair with detectable mf"="orange")
   df3$Hypothesis <- factor(df3$Hypothesis, levels = c("L3 exposure", "L4-L5 moult", "Any worm", "Mating worm pair", "Mating worm pair with any mf", "Mating worm pair with detectable mf"), ordered=TRUE)
   
-  plotLineTypes <- c("L3 exposure"="dashed", "L4-L5 moult"="dashed", "Any worm"="solid", "Mating worm pair"="dashed", "Mating worm pair with any mf"="dotted", "Mating worm pair with detectable mf"="dotted")
+  plotLineTypes <- c("L3 exposure"="dashed", "L4-L5 moult"="dashed", "Any worm"="dashed", "Mating worm pair"="dotted", "Mating worm pair with any mf"="dotted", "Mating worm pair with detectable mf"="dotted")
   
-  plot <- ggplot() + geom_point(aes(x=age_groups, y=ov16_prev_elisa*100), color="black", data=df1) +
-    geom_errorbar(aes(x=age_groups, ymin=ov16_wilson_lb*100, ymax=ov16_wilson_ub*100), width=0.2, colour="black", data=df1) +
+  plot <- ggplot() + geom_point(aes(x=age_groups, y=ov16_prev_elisa*100), alpha=0.5, color="black", data=df1) +
+    geom_errorbar(aes(x=age_groups, ymin=(ov16_wilson_lb*100), ymax=(ov16_wilson_ub*100)), width=2.5, alpha=0.5, colour="black", data=df1) +
     
     geom_line(aes(x=age_groups, y=ov16_prev*100, color=Hypothesis, linetype=Hypothesis, alpha=1), linewidth=1.1, data=df2) +
     
@@ -838,7 +852,7 @@ make_adjusted_plot <- function(df1, df2, compValLabel, compVal1, compVal2, df3, 
     
     scale_color_manual(name="Hypotheses", values=color_vals) +
     scale_linetype_manual(name="Hypotheses", values=plotLineTypes) +
-    
+    theme_bw() +
     ggtitle(paste(label))+#, "Gabon Seroprevalence Projections", desc)) +
     xlab("Age (years)") +
     ylab("Ov16 Seroprevalence (%)") +
@@ -846,27 +860,54 @@ make_adjusted_plot <- function(df1, df2, compValLabel, compVal1, compVal2, df3, 
   return(plot)
 }
 
-adjust_comp <- make_adjusted_plot(summarized_gabon_rdt_elisa, simulation_summary_elisa_k2, "Diagnostic Adjustment", "No", "Yes", simulation_summary_sens_spec_elisa_k2)
+#adjust_comp <- make_adjusted_plot(summarized_gabon_rdt_elisa, simulation_summary_elisa_k2, "Diagnostic Adjustment", "No", "Yes", simulation_summary_sens_spec_elisa_k2)
 
-k_comp <- make_adjusted_plot(summarized_gabon_rdt_elisa, simulation_summary_sens_spec_elisa, "Overdispersion Parameter", "0.3", "0.2", simulation_summary_sens_spec_elisa_k2, "b)")
+#k_comp <- make_adjusted_plot(summarized_gabon_rdt_elisa, simulation_summary_sens_spec_elisa, "Overdispersion Parameter", "0.3", "0.2", simulation_summary_sens_spec_elisa_k2, "b)")
 
-ggsave("images/gabon_adjust_comp_new.png", adjust_comp, width=7500, height = 6000, units="px", dpi=900)
+#ggsave("images/gabon_adjust_comp_new.png", adjust_comp, width=7500, height = 6000, units="px", dpi=900)
 
-ggsave("images/gabon_k_compare_new.png", k_comp, width=7500, height = 6000, units="px", dpi=900)
+#ggsave("images/gabon_k_compare_new.png", k_comp, width=7500, height = 6000, units="px", dpi=900)
 
+#adjust_comp_100_mount_k2 <- make_adjusted_plot(summarized_gabon_rdt_elisa, simulation_summary_elisa_100_mount, "Diagnostic Adjustment", "No", "Yes", simulation_summary_sens_spec_elisa_100_mount)
+#ggsave("images/gabon_adjust_comp_new.png", adjust_comp_100_mount_k2, width=7500, height = 6000, units="px", dpi=900)
 
-ggsave("images/gabon_init_graph.png", grid.arrange(adjust_comp + guides(color="none", linetype="none") + ylim(0, 45), k_comp + ylim(0, 25), ncol=1), width=10500, height = 10500, units="px", dpi=900)
+adjust_comp_100_mount_k2_1 <- make_adjusted_plot(summarized_gabon_rdt_elisa, simulation_summary_elisa_100_mount, "Diagnostic Adjustment", "No", "Yes", simulation_summary_elisa_100_mount) + ylim(0,51)
 
-antib_k2 <- make_adjusted_plot(summarized_gabon_rdt_elisa, simulation_summary_sens_spec_elisa_100_mount, "% Mounting Antibody Response", "100", "80", simulation_summary_sens_spec_elisa_k2, "a)", "w/ Changing Antibody Response")
-ggsave("images/gabon_k2_mounting.png", antib_k2, width=7500, height = 6000, units="px", dpi=900)
+adjust_comp_100_mount_k2_2 <- make_adjusted_plot(summarized_gabon_rdt_elisa, simulation_summary_sens_spec_elisa_100_mount, "Diagnostic Adjustment", "No", "Yes", simulation_summary_sens_spec_elisa_100_mount) + ylim(0,51)
 
-trig_sero_k2 <- make_adjusted_plot(summarized_gabon_rdt_elisa, simulation_summary_sens_spec_elisa_sero_trigger, "Seroreversion", "Yes", "No", simulation_summary_sens_spec_elisa_k2, "b)", "w/ Seroreversion")
-ggsave("images/gabon_k2_sero_trigger.png", trig_sero_k2, width=7500, height = 6000, units="px", dpi=900)
+arranged_graph <- ((adjust_comp_100_mount_k2_1 + theme(legend.direction = "horizontal") + guides(alpha="none")) | (adjust_comp_100_mount_k2_2 + theme(legend.direction = "horizontal", axis.title.y=element_blank()) +  guides(alpha="none") + ggtitle("b)"))) + plot_layout(guides = "collect") + plot_annotation(
+  theme = theme(legend.position = "bottom",
+                legend.direction = "horizontal")
+)
+ggsave("images/gabon_adjust_comp_new_paper.png",arranged_graph, width=8500, height=6000, units="px", dpi=900)
 
-inf_sero_k2 <- make_adjusted_plot(summarized_gabon_rdt_elisa, simulation_summary_sens_spec_elisa_sero_no_inf, "Seroreversion", "Yes", "No", simulation_summary_sens_spec_elisa_k2, "c)", "w/ Seroreversion")
-ggsave("images/gabon_k2_sero_infection.png", inf_sero_k2, width=7500, height = 6000, units="px", dpi=900)
+#ggsave("images/gabon_init_graph.png", grid.arrange(adjust_comp + guides(color="none", linetype="none") + ylim(0, 45), k_comp + ylim(0, 25), ncol=1), width=10500, height = 10500, units="px", dpi=900)
 
-ggsave("images/gabon_k2_sero_mount_fig.png", grid.arrange(antib_k2 + ylim(0,25), grid.arrange(trig_sero_k2 + guides(color="none", linetype="none"), inf_sero_k2  + guides(color="none", linetype="none"), ncol=2), ncol=1), width=7500, height = 8250, units="px", dpi=900)
+#antib_k2 <- make_adjusted_plot(summarized_gabon_rdt_elisa, simulation_summary_sens_spec_elisa_100_mount, "% Mounting Antibody Response", "100", "80", simulation_summary_sens_spec_elisa_k2, "a)", "w/ Changing Antibody Response")
+#ggsave("images/gabon_k2_mounting.png", antib_k2, width=7500, height = 6000, units="px", dpi=900)
+
+#trig_sero_k2 <- make_adjusted_plot(summarized_gabon_rdt_elisa, simulation_summary_sens_spec_elisa_sero_trigger, "Seroreversion", "Yes", "No", simulation_summary_sens_spec_elisa_k2, "b)", "w/ Seroreversion")
+#ggsave("images/gabon_k2_sero_trigger.png", trig_sero_k2, width=7500, height = 6000, units="px", dpi=900)
+
+#inf_sero_k2 <- make_adjusted_plot(summarized_gabon_rdt_elisa, simulation_summary_sens_spec_elisa_sero_no_inf, "Seroreversion", "Yes", "No", simulation_summary_sens_spec_elisa_k2, "c)", "w/ Seroreversion")
+#ggsave("images/gabon_k2_sero_infection.png", inf_sero_k2, width=7500, height = 6000, units="px", dpi=900)
+
+#ggsave("images/gabon_k2_sero_mount_fig.png", grid.arrange(antib_k2 + ylim(0,25), grid.arrange(trig_sero_k2 + guides(color="none", linetype="none"), inf_sero_k2  + guides(color="none", linetype="none"), ncol=2), ncol=1), width=7500, height = 8250, units="px", dpi=900)
+
+trig_sero_k2_1 <- make_adjusted_plot(summarized_gabon_rdt_elisa, simulation_summary_sens_spec_elisa_sero_trigger, "Seroreversion", "Yes", "No", simulation_summary_sens_spec_elisa_sero_trigger, "b)", "w/ Seroreversion")
+
+inf_sero_k2_1 <- make_adjusted_plot(summarized_gabon_rdt_elisa, simulation_summary_sens_spec_elisa_sero_no_inf, "Seroreversion", "Yes", "No", simulation_summary_sens_spec_elisa_k2, "c)", "w/ Seroreversion")
+
+arranged_seroreversion_graph <- ((adjust_comp_100_mount_k2_2 + ylim(0, 21) + theme(legend.direction = "horizontal") + guides(alpha="none")) | (trig_sero_k2_1 + ylim(0, 21) + theme(legend.direction = "horizontal", axis.title.y=element_blank()) + guides(alpha="none")) | (inf_sero_k2_1 + ylim(0, 21) + theme(legend.direction = "horizontal", axis.title.y=element_blank()) + guides(alpha="none"))) + plot_layout(guides = "collect") + plot_annotation(
+  theme = theme(legend.position = "bottom",
+                legend.direction = "horizontal")
+)
+
+#ggsave("images/tst.png", arranged_seroreversion_graph, width=8250, height = 5000, units="px", dpi=900)
+
+ggsave("images/gabon_k2_sero_mount_fig_paper.png", arranged_seroreversion_graph, width=8250, height = 4000, units="px", dpi=900)
+
+make_adjusted_plot(summarized_gabon_rdt_elisa, simulation_summary_sens_spec_elisa_100_mount, "Diagnostic Adjustment", "No", "Yes", simulation_summary_sens_spec_elisa_100_mount)
 ```
 
 ### Make Plots
@@ -910,10 +951,11 @@ kable(elisa_plots_sero_compare_no_inf_80$lsr_vals, "html") %>% kable_styling("st
 savePlots(elisa_plots_sero_compare_no_inf_80$plots, "elisa_k2_seroreversion_compare_no_infection_80")
 
 
-residual_results <- rbind(calcResiduals(summarized_gabon_rdt_elisa, simulation_summary_elisa_k2, "k2"),
-                          calcResiduals(summarized_gabon_rdt_elisa, simulation_summary_sens_spec_elisa_k2, "Adjusted k2"),
+residual_results <- rbind(#calcResiduals(summarized_gabon_rdt_elisa, simulation_summary_elisa_k2, "k2"),
+                          #calcResiduals(summarized_gabon_rdt_elisa, simulation_summary_sens_spec_elisa_k2, "Adjusted k2"),
                           calcResiduals(summarized_gabon_rdt_elisa, simulation_summary_elisa, "k3"),
                           calcResiduals(summarized_gabon_rdt_elisa, simulation_summary_sens_spec_elisa, "Adjusted k3"),
+                          calcResiduals(summarized_gabon_rdt_elisa, simulation_summary_sens_spec_elisa_sero_no_inf_k3, "Adjusted k3 Seroreversion on No Infection"),
                           calcResiduals(summarized_gabon_rdt_elisa, simulation_summary_elisa_100_mount, "100% Antibody Response"),
                           calcResiduals(summarized_gabon_rdt_elisa, simulation_summary_sens_spec_elisa_100_mount, "Adjusted 100% Antibody Response"),
                           calcResiduals(summarized_gabon_rdt_elisa, simulation_summary_elisa_sero_trigger, "Seroreversion on Trigger"),
@@ -922,7 +964,7 @@ residual_results <- rbind(calcResiduals(summarized_gabon_rdt_elisa, simulation_s
                           calcResiduals(summarized_gabon_rdt_elisa, simulation_summary_sens_spec_elisa_sero_no_inf, "Adjusted Seroreversion on No Infection"))
 residual_results$ov16 <- as.numeric(residual_results$ov16)
 residual_results %>% pivot_wider(id_cols=c(Hypothesis), names_from=c(Descriptor), values_from=c(ov16)) %>% mutate(
-  across(2:11, ~ ifelse(. == min(.), text_spec(., bold=TRUE), .))
+  across(2:10, ~ ifelse(. == min(.), text_spec(., bold=TRUE), .))
 ) %>% kable('html', escape=FALSE) %>% kable_classic()
 ```
 
