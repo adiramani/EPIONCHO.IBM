@@ -73,8 +73,7 @@ ep.equi.sim <- function(time.its,
                         correlated_compliance = "NO",
                         comp.correlation,
                         treat.switch = NA,
-                        treat.type = NA,
-                        treat.switch.start=NA)
+                        treat.type = NA)
 
 
 {
@@ -615,7 +614,7 @@ ep.equi.sim <- function(time.its,
       compliance.mat <- eligible_out[[1]] # extract updated compliance matrix
 
       cov.in <- compliance.mat[,6] # this is vector of individuals to be treated from compliance mat, to feed into change.worm.per.ind.treat
-      has_been_treated <- has_been_treated | cov.in
+      has_been_treated <- has_been_treated | (cov.in == 1)
 
       # Count the number of treated hosts
       hostsEligibleAge <- compliance.mat[,4]
@@ -867,7 +866,7 @@ ep.equi.sim <- function(time.its,
     temp.mf <- mf.per.skin.snip(ss.wt = 2, num.ss = 2, slope.kmf = 0.0478, int.kMf = 0.313, data = all.mats.temp, nfw.start, fw.end,
                                 mf.start, mf.end, pop.size = N, kM.const.toggle)
 
-    mfp_recorded_year_tracker <- c(mfp_recorded_year_tracker, i / (1/time_its))
+    mfp_recorded_year_tracker <- c(mfp_recorded_year_tracker, i / (1/time.its))
     prev <-  c(prev, prevalence.for.age(age = min.mont.age, ss.in = temp.mf, main.dat = all.mats.temp))
     pnc_values <- c(pnc_values, mean(has_been_treated, na.rm=TRUE))
 
@@ -897,6 +896,7 @@ ep.equi.sim <- function(time.its,
 
       all.mats.temp[to.die, cols.to.zero] <- 0 #set age, sex and parasites to 0 (includes L1, but not L2 L3)
       all.mats.temp[to.die, 3] <- rbinom(length(to.die), 1, 0.5) #draw sex
+      has_been_treated[to.die] <- FALSE
 
       if(correlated_compliance == "YES" & any(i > times.of.treat.in)){
       compliance.mat[to.die, 3] <- 0
