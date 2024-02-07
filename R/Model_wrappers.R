@@ -352,6 +352,7 @@ ep.equi.sim <- function(time.its,
 
   prev <-  c()
   pnc_values <- c()
+  pnc_values_eligibles <- c()
   has_been_treated <- rep(FALSE, N)
   mfp_recorded_year_tracker <- c()
   mean.mf.per.snip <- c()
@@ -869,6 +870,8 @@ ep.equi.sim <- function(time.its,
     mfp_recorded_year_tracker <- c(mfp_recorded_year_tracker, i / (1/time.its))
     prev <-  c(prev, prevalence.for.age(age = min.mont.age, ss.in = temp.mf, main.dat = all.mats.temp))
     pnc_values <- c(pnc_values, (1 - mean(has_been_treated, na.rm=TRUE)))
+    pnc_values_eligibles <- c(pnc_values_eligibles, (1 - mean(has_been_treated[which(all.mats.temp[,2] >= min.mont.age)])), na.rm=TRUE)
+
 
 
     mean.mf.per.snip <- c(mean.mf.per.snip, mean(temp.mf[[2]][which(all.mats.temp[,2] >= min.mont.age)]))
@@ -969,16 +972,16 @@ ep.equi.sim <- function(time.its,
     #enough outputs to restart sims
     if(isTRUE(run_equilibrium))
     {
-      outp <- list(prev, mean.mf.per.snip, L3_vec, list(all.mats.temp, ex.vec, treat.vec.in, l.extras, mf.delay, l1.delay, ABR, exposure.delay), ABR_recorded, coverage.recorded, mfp_recorded_year_tracker, pnc_values)
-      names(outp) <- c('mf_prev', 'mf_intens', 'L3', 'all_equilibrium_outputs', 'ABR_recorded', 'coverage.recorded', 'year', 'pnc')
+      outp <- list(prev, mean.mf.per.snip, L3_vec, list(all.mats.temp, ex.vec, treat.vec.in, l.extras, mf.delay, l1.delay, ABR, exposure.delay), ABR_recorded, coverage.recorded, mfp_recorded_year_tracker, pnc_values, pnc_values_eligibles)
+      names(outp) <- c('mf_prev', 'mf_intens', 'L3', 'all_equilibrium_outputs', 'ABR_recorded', 'coverage.recorded', 'year', 'pnc', 'pnc_eligibles')
       return(outp)
     }
 
     #assuming output will not be used for further sims
     if(isFALSE(run_equilibrium))
     {
-      outp <- list(prev, mean.mf.per.snip, L3_vec, ABR, all.mats.temp, ABR_recorded, coverage.recorded, mfp_recorded_year_tracker, pnc_values)
-      names(outp) <-  c('mf_prev', 'mf_intens', 'L3', 'ABR', 'all_infection_burdens', 'ABR_recorded', 'coverage.recorded', 'year', 'pnc')
+      outp <- list(prev, mean.mf.per.snip, L3_vec, ABR, all.mats.temp, ABR_recorded, coverage.recorded, mfp_recorded_year_tracker, pnc_values, pnc_values_eligibles)
+      names(outp) <-  c('mf_prev', 'mf_intens', 'L3', 'ABR', 'all_infection_burdens', 'ABR_recorded', 'coverage.recorded', 'year', 'pnc', 'pnc_eligibles')
       return(outp)
     }
   }
