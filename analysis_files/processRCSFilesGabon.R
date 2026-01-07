@@ -1,5 +1,5 @@
 library(dplyr)
-processRCSFiles <- function (files='/rds/general/user/ar722/home/ov16_test/ov16_output/', verbose=TRUE, onlyCalcMFP=FALSE, useSerorevert=FALSE, onlyCalcOv16Trends=FALSE) {
+processRCSFiles <- function (files='path/to/model/outputs/', verbose=TRUE, onlyCalcMFP=FALSE, useSerorevert=FALSE, onlyCalcOv16Trends=FALSE) {
   allOutputs <- data.frame()
   fileToUse <- files#paste("data/", files, sep="")
 
@@ -136,10 +136,10 @@ processRCSFiles <- function (files='/rds/general/user/ar722/home/ov16_test/ov16_
   return(returnVal)
 }
 
-saveRDS(processRCSFiles(onlyCalcMFP = TRUE), "/rds/general/user/ar722/home/ov16_test/gabon_agg_data/gabon_mfp_abr_all_age_data.RDS")#gabon_mfp_data.RDS")
+saveRDS(processRCSFiles(onlyCalcMFP = TRUE), "/path/where/file/will/be/saved/gabon_agg_data_rdt_4400_pop_updated_seroreversion_worm_revert_onchosim/rdt_gabon_mfp_data.RDS")
 
-#saveRDS(processRCSFiles(onlyCalcOv16Trends=TRUE), "/rds/general/user/ar722/home/ov16_test/gabon_agg_data/gabon_ov16_trends.RDS")
+saveRDS(processRCSFiles(onlyCalcOv16Trends=TRUE), "/path/where/file/will/be/saved/gabon_agg_data_rdt_4400_pop_updated_seroreversion_worm_revert_onchosim/rdt_gabon_ov16_trends.RDS")
 
-#saveRDS(processRCSFiles(), "/rds/general/user/ar722/home/ov16_test/gabon_agg_data/gabon_mfp_abr_data.RDS")#gabon_100_mount_data.RDS")
+saveRDS(processRCSFiles(), "/path/where/file/will/be/saved/gabon_agg_data_rdt_4400_pop_updated_seroreversion_worm_revert_onchosim/rdt_gabon_100_mount_data.RDS")
 
-#saveRDS(processRCSFiles(useSerorevert=TRUE), "/rds/general/user/ar722/home/ov16_test/gabon_agg_data/gabon_seroreversion_data.RDS")
+saveRDS(processRCSFiles(useSerorevert=TRUE), "/path/where/file/will/be/saved/gabon_agg_data_rdt_4400_pop_updated_seroreversion_worm_revert_onchosim/rdt_gabon_seroreversion_data.RDS")

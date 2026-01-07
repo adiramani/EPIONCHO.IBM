@@ -1,6 +1,6 @@
 
 
-#### Current file: R/adult_worm_dynamics_functions.R 
+#### Current file: R/adult_worm_dynamics_functions.R
 
 #' @title
 #' delta.h
@@ -157,8 +157,8 @@ change.worm.per.ind1 <- function(treat.vec, lambda.zero, DT, omeg, ws, compartme
 #'
 #' @returns list containing vector of a) updated lambda values per individual, b) updated (or not) vector of times since treatment for each individual
 change.worm.per.ind.treat <- function(give.treat, iteration, treat.start, times.of.treat, treat.stop,
-                                 onchosim.cov, treat.vec, DT, cum.infer, lam.m, phi, N,
-                                 mort.fems, lambda.zero.in)
+                                      onchosim.cov, treat.vec, DT, cum.infer, lam.m, phi, N,
+                                      mort.fems, lambda.zero.in)
 {
 
   if(give.treat == 1 & iteration >= treat.start)
@@ -287,7 +287,7 @@ change.worm.per.ind2 <- function(DT, time.each.comp, compartment, new.worms.nf.f
 
 
 
-#### Current file: R/epilepsy_module_functions.R 
+#### Current file: R/epilepsy_module_functions.R
 
 #' @title
 #' OAE probability function
@@ -305,7 +305,7 @@ OAE_mfcount_prob_func <- function(dat){
 
   fit <- glm(prob ~ log(mf + 1), family = gaussian(link = "log"),
              data = dat) # fitted logarithmic relationship between prob OAE ~ mean mf load;
-                                         # generalized linear model with log-link function
+  # generalized linear model with log-link function
 
   newdat <- data.frame(mf = seq(0, 10000, 1)) # generate new dataframe with mf counts from 0 to 1000 by 1
 
@@ -360,14 +360,14 @@ find_indiv_OAE_func <- function(dat, mf.start, mf.end, worms.start, nfw.start, f
   # ind_new_inf <- which(worms_all > 0 & infected_at_all == 0) # find individuals with at least 1 worm & no previous infection (therefore new)
 
   ind_new_inf <- which(male_worms_all > 0 & female_worms_all > 0 & infected_at_all == 0) # find individuals where both male and female worms present
-                                                                                         # (i.e. pair of mating worms present in host)
+  # (i.e. pair of mating worms present in host)
 
   # print(ind_new_inf)
 
   infected_at_all[ind_new_inf] <-  1 # where new worm infection, give value 1 at individual position in vector
 
   ind_age <- which(round(dat[, 2]) == round(age_to_samp)) # find individuals (position in individual vector) where (rounded)
-                                                          # age at sampling (e.g. between 3 - 10) matches (rounded) age of individual
+  # age at sampling (e.g. between 3 - 10) matches (rounded) age of individual
 
   # print(ind_age)
 
@@ -380,9 +380,9 @@ find_indiv_OAE_func <- function(dat, mf.start, mf.end, worms.start, nfw.start, f
   # print(age_to_samp)
 
   tot_ind_ep_samp <- Reduce(intersect, list(ind_age, ind_ibf, ind_no_OAE, ind_no_samp)) # goes through each of the individual lists
-                                                                                        # (individual criteria for whether a person)
-                                                                                        # If individual has satisfied all those (intersect finds commonalities in columns)
-                                                                                        # form pool of individuals which are then sampled for new OAE onset
+  # (individual criteria for whether a person)
+  # If individual has satisfied all those (intersect finds commonalities in columns)
+  # form pool of individuals which are then sampled for new OAE onset
   check_ind <- c(check_ind, length(tot_ind_ep_samp)) #
 
   return(list(tot_ind_ep_samp, infected_at_all, check_ind))
@@ -420,15 +420,15 @@ new_OAE_cases_func <- function(temp.mf, tot_ind_ep_samp, OAE_probs, dat,
 
 
   mf_round <- round(temp.mf[[2]][tot_ind_ep_samp]) + 1 # mf count (in those tested)
-                                                       # note: if zero the first probability comes from from ep_probs
-                                                       # note: +1 to account for (log) 0
+  # note: if zero the first probability comes from from ep_probs
+  # note: +1 to account for (log) 0
 
 
   OAE_rates <- OAE_probs[mf_round] # get probabilities (based on individual mf count)
 
   OAE[tot_ind_ep_samp] <- rbinom(length(tot_ind_ep_samp), 1, OAE_rates) # for individuals (those positions of individuals as new cases)
-                                                                        # with an probability of OAE, they undergo a
-                                                                        # Bernoulli trial to ascertain whether OAE onset realized
+  # with an probability of OAE, they undergo a
+  # Bernoulli trial to ascertain whether OAE onset realized
 
   tested_OAE[tot_ind_ep_samp] <- 1 # records that they've been tested (those identified in tot_ind_ep_samp are indexed)
 
@@ -459,7 +459,7 @@ new_OAE_cases_func <- function(temp.mf, tot_ind_ep_samp, OAE_probs, dat,
 }
 
 
-#### Current file: R/Intervention_functions.R 
+#### Current file: R/Intervention_functions.R
 
 #' @title
 #' Treat individuals function
@@ -500,7 +500,7 @@ os.cov <- function(all.dt, pncomp, covrg, N)
 }
 
 
-#### Current file: R/larval_dynamics_functions.R 
+#### Current file: R/larval_dynamics_functions.R
 
 #' @title
 #' Density-dependence in vector
@@ -595,7 +595,7 @@ calc.L3 <- function(nutwo, L2.in, a.H, g, mu.v, sigma.L0)
 
 
 
-#### Current file: R/mf_dynamics_functions.R 
+#### Current file: R/mf_dynamics_functions.R
 
 #' @title
 #' rotate matrix
@@ -789,7 +789,7 @@ mf.per.skin.snip <- function(ss.wt, num.ss, slope.kmf, int.kMf, data, nfw.start,
   if(isTRUE(kM.const.toggle)){
     kmf <- 0 * (rowSums(data[,nfw.start:fw.end])) + 15}
   else {
-     kmf <- slope.kmf * (rowSums(data[,nfw.start:fw.end])) + int.kMf #rowSums(da... sums up adult worms for all individuals giving a vector of kmfs
+    kmf <- slope.kmf * (rowSums(data[,nfw.start:fw.end])) + int.kMf #rowSums(da... sums up adult worms for all individuals giving a vector of kmfs
   }
 
   mfobs <- rnbinom(pop.size, size = kmf, mu = ss.wt * (rowSums(data[,mf.start:mf.end])))
@@ -905,7 +905,7 @@ prevalence.for.age_sex_compl.strata <- function(ss.in, main.dat, lwr_age, upr_ag
 
 
 
-#### Current file: R/Model_wrappers.R 
+#### Current file: R/Model_wrappers.R
 
 #EPIONCHO-IBM
 #30/04/2020
@@ -1001,7 +1001,7 @@ ep.equi.sim <- function(time.its,
   if(length(ov16_store_times) > 0) {
     ov16_store_times <- round(ov16_store_times / (DT))
   }
-  
+
   if(give.treat == 1)
   {
     treat.stop <- round(treat.stop / (DT))
@@ -1467,7 +1467,7 @@ ep.equi.sim <- function(time.its,
     mls <- which(all.mats.cur[,3] == 1) # matt : ?
     fmls <- which(all.mats.cur[,3] == 0) # matt: ?
 
-    e.f <- 1/(sex.rat*(Q-1) + 1) # 0.9
+    e.f <- Q * 1/(sex.rat*(Q-1) + 1) # 0.9
     e.m <- Q * e.f # 1.08
 
     s.a.exp <- rep(0, N)
@@ -1910,13 +1910,13 @@ ep.equi.sim <- function(time.its,
 }
 
 
-#### Current file: runModelRCS.R 
+#### Current file: runModelRCS.R
 
 library(dplyr)
 
-iter <- as.numeric(Sys.getenv("PBS_ARRAY_INDEX"))
-#tmp_iters_to_use = c(820, 821, 822, 823, 3542)
-#iter = tmp_iters_to_use[tmp_iter]
+# TODO: Set your own index here
+# iter <- as.numeric(Sys.getenv("PBS_ARRAY_INDEX"))
+iter <- #1
 print(iter)
 set.seed(iter + (iter*3758))
 
@@ -1924,12 +1924,11 @@ DT.in <- 1/366
 
 # 3000
 kEs = c(rep(0.2, 3000), rep(0.3, 3000))
-#kEs = c(rep(0.2, 1500), rep(0.3, 2000))
 seroreversions = rep(c(rep("no_infection", 1500), rep("absence_of_trigger", 1500)), 2)
 
 
 #### Current file: runModelRCS.R
-#iter <- as.numeric(Sys.getenv("PBS_ARRAY_INDEX"))
+
 
 DT.in <- 1/366
 
@@ -1951,12 +1950,10 @@ if(kE == 0.2) {
 
 # Gabon Elisa Dataset
 if (kE == 0.2) {
-  #abrs <- rep(rep(seq(70, 77, 1), 500), 2)
-  ABR.in <- 76 #abrs[iter]# 72
+  ABR.in <- 76
   mda.val <- 0
 } else {
-  #abrs <- rep(rep(seq(170, 177, 1), 500), 2)
-  ABR.in <- 179 #abrs[iter] # 173
+  ABR.in <- 179
   mda.val <- 0
 }
 
@@ -1993,4 +1990,4 @@ params <- list(mda.val, ABR.in, kE, sero_val)
 names(params) <- c('MDA', 'ABR', 'Ke', "sero_type")
 output <- append(output, params)
 
-saveRDS(output, paste("../ov16_test/ov16_output/ov16_any_worm_output", kE, "_", iter,".rds", sep=""))
+saveRDS(output, paste("path/ov16_any_worm_output", kE, "_", iter,".rds", sep=""))

@@ -5,6 +5,10 @@ date: "2023-06-09"
 output: html_document
 ---
 
+This chunk initializes the libraries and variables needed for the analysis code below. `data_folder` should be the path to the post-processed output of running `all_funcs_combined.R` with 6000 iterations. You can post-process the data using code from `processRCSFilesGabon.R`. 
+`mfp_test_folder` should be the path to the post-processed output of running `all_funcs_combined.R` using methods from section 3.1 of the Running_EPIONCHO_IBM_Ov16 vignette. If you do not want to run this, you can set the `run_mfp` variable to FALSE.
+
+In case you want to use results with onchosim exposure, you will also have to run the above, however with `all_funcs_combined_onchosim.R`, and setting `use_onchosim = TRUE` in the code chunk below. Note that when running the analysis code with ONCHOSIM exposure, the code expects there to still be results for the model using EPIONCHO exposure.
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 set.seed(7281998)
@@ -34,13 +38,11 @@ knitr::knit_hooks$set(timeit = local({
     }
   }})
 )
-make_old_graphs = FALSE
 simulateRDT=TRUE
 run_mfp = FALSE
 use_onchosim = TRUE
 
 output_version = "v9"
-
 
 data_folder = "gabon_agg_data_rdt_4400_pop_updated_seroreversion_worm_revert/"
 
@@ -58,6 +60,10 @@ knitr::opts_knit$set(root.dir = dirname(getwd()))
 
 ## Actual Data
 
+This code chunk sets up the read and processing files for the observed data.
+
+The Gabon data can be found with the following paper in Data in Brief:
+Atsame J, Stapley JN, Ramani A, Mourou R, Ntsame E, Efame E, Angue ON, Obiang JL, Pilotte N, Gass K, Basáñez MG. Comparison of diagnostic tools to assess the feasibility of programmatic use of rapid diagnostic tests for onchocerciasis: A dataset from Gabon. Data Brief. 2024 Sep 6;57:110901. doi: 10.1016/j.dib.2024.110901. PMID: 39314896; PMCID: PMC11418118.
 ```{r basic_read_functions, timeit=TRUE}
 readGabonData <- function() {
   fileName <- "../../RVC/Improving Ov16/Ov16 Data/Skin_snip_and_Ov16_RDT_and_Ov16_ELISA_data_Gabon_2015.xlsx"
@@ -392,12 +398,6 @@ calcSensSpecSeroPrev <- function(run_seropos_data, sens=1, spec=1, prob=c()) {
 }
 
 summarizeSimulationDataHelper <- function(data, index, sensSpec, colsToGroup, hypNamesLoc, newHypNames, extra_summary=FALSE) {
-  # if (!any(sens %in% colnames(data))) {
-  #   data <- data %>% mutate(
-  #     sens = sensSpec[1],
-  #     spec = sensSpec[2]
-  #   )
-  # }
   sens_val = sensSpec[1]
   spec_val = sensSpec[2]
   if (!("sens" %in% names(data)) | extra_summary) {
@@ -430,31 +430,6 @@ summarizeSimulationDataHelper <- function(data, index, sensSpec, colsToGroup, hy
       mf_prev = mean(mf_prev)
     ), by = colsToGroup
   ]
-  # data <- data %>% group_by(run_num) %>%
-  #   mutate(
-  #     ov16_pos=calcSensSpecSeroPrev(ov16_pos, sens, spec, probs),
-  #     ov16_pos_l3=calcSensSpecSeroPrev(ov16_pos_l3, sens, spec, probs),
-  #     ov16_pos_l4=calcSensSpecSeroPrev(ov16_pos_l4, sens, spec, probs),
-  #     ov16_pos_mating_no_mf=calcSensSpecSeroPrev(ov16_pos_mating_no_mf, sens, spec, probs),
-  #     ov16_pos_mating_detectable_mf=calcSensSpecSeroPrev(ov16_pos_mating_detectable_mf, sens, spec, probs),
-  #     ov16_pos_mating_any_mf=calcSensSpecSeroPrev(ov16_pos_mating_any_mf, sens, spec, probs)
-  #   ) %>% ungroup() %>% as.data.frame()
-  # data <- data %>%
-  #   dplyr::select(all_of(colsToGroup), everything()) %>%
-  #   dplyr::group_by(!!!syms(colsToGroup)) %>%
-  #   dplyr::summarise(ov16_any_worm_prev=mean(ov16_pos),
-  #                    ov16_l3_prev=mean(ov16_pos_l3),
-  #                    ov16_l4_prev=mean(ov16_pos_l4),
-  #                    ov16_mating_no_mf_prev=mean(ov16_pos_mating_no_mf),
-  #                    ov16_mating_any_mf_prev=mean(ov16_pos_mating_any_mf),
-  #                    ov16_mating_detectable_mf_prev=mean(ov16_pos_mating_detectable_mf),
-  #                    num_mf_pos=sum(mf_prev),
-  #                    total_mf=n(),
-  #                    mf_prev=mean(mf_prev), .groups="drop") %>% as.data.frame()
-  # colnames(data)[all_of(hypNamesLoc)] <- newHypNames
-  # data <- data %>%
-  #   as.data.frame() %>%
-  #   pivot_longer(cols=all_of(hypNamesLoc), names_to="Hypothesis", values_to = "ov16_prev")
   if (extra_summary) {
     tmp_summary <- tmp_summary[, .(
         ov16_any_worm_prev = mean(ov16_any_worm_prev),
@@ -516,19 +491,6 @@ summarizeSimulationData <- function(data, sensSpec=c(1,1), groupBySex=TRUE) {
     value.name = "ov16_prev"
   ))
   df$Hypothesis <- as.character(df$Hypothesis)
-  
-  # if (length(sensSpec) > 1) {
-  #   df <- df %>%
-  #     dplyr::group_by(age_groups, Hypothesis, sens, spec) %>%
-  #     dplyr::summarise(
-  #       ov16_prev = mean(ov16_prev),
-  #       num_mf_pos=ceiling(mean(num_mf_pos)),
-  #       total_mf=ceiling(mean(n())),
-  #       mf_prev=mean(mf_prev),
-  #       .groups="drop"
-  #     ) %>%
-  #     as.data.frame()
-  # }
   
   df <- df %>% dplyr::group_by(!!!syms(groupByCols2)) %>%
     dplyr::summarise(
@@ -655,8 +617,7 @@ custom_calc_resid_sampled_sens_spec <- function(
     original_data, new_data, desc,
     sens_spec, sampled_sens_spec_from_dist, age_limit=Inf
 ) {
-  # Rprof(paste0("profile_", desc, ".out"), line.profiling = TRUE)
-  
+
   new_data$probs <- runif(dim(new_data)[1])
   results <- vector("list", length(sampled_sens_spec_from_dist))
   
@@ -1889,313 +1850,4 @@ plot_6
 
 ggsave(paste0("images/images_", output_version,"/all_hyp_using_sampled_diagnostic_performance.svg"), plot_6, width=4250, height=3000, units="px", dpi=600)
 
-```
-
-
-
-### Checking difference between curves
-```{r}
-library(lme4)
-
-tmp <- summarizeSimulatedGabon_rdt_100_mount
-tmp$probs <- runif(dim(tmp)[1])
-sum_tmp <- tmp %>% group_by(run_num) %>% mutate(
-    #H1i=calcSensSpecSeroPrev(ov16_pos_l3, 40, 99, probs),
-    #H2i=calcSensSpecSeroPrev(ov16_pos_l4, 40, 99, probs),
-    #H3i=calcSensSpecSeroPrev(ov16_pos, 40, 99, probs),
-    H4i=calcSensSpecSeroPrev(ov16_pos_mating_any_mf, 40, 99, probs)
-  ) %>% pivot_longer(
-    cols=c(H4i), names_to="Hypothesis", values_to = "ov16_prev"
-  ) %>% 
-  select(run_num, Hypothesis, ov16_prev, age_groups)
-tmp <- summarizeSimulatedGabon_rdt_sero_trigger
-tmp$probs <- runif(dim(tmp)[1])
-sum_tmp <- rbind(sum_tmp, tmp %>% group_by(run_num) %>% mutate(
-      #H1ii=calcSensSpecSeroPrev(ov16_pos_l3, 40, 99, probs),
-      #H2ii=calcSensSpecSeroPrev(ov16_pos_l4, 40, 99, probs),
-      H3ii=calcSensSpecSeroPrev(ov16_pos, 40, 99, probs)
-      #H4ii=calcSensSpecSeroPrev(ov16_pos_mating_any_mf, 40, 99, probs)
-    ) %>% pivot_longer(
-      cols=c(H3ii), names_to="Hypothesis", values_to = "ov16_prev"
-    ) %>% 
-    select(run_num, Hypothesis, ov16_prev, age_groups)
-  )
-tmp <- summarizeSimulatedGabon_rdt_sero_no_inf
-tmp$probs <- runif(dim(tmp)[1])
-sum_tmp <- rbind(sum_tmp, tmp %>% group_by(run_num) %>% mutate(
-      #H1ii=calcSensSpecSeroPrev(ov16_pos_l3, 40, 99, probs),
-      #H2ii=calcSensSpecSeroPrev(ov16_pos_l4, 40, 99, probs),
-      #H3ii=calcSensSpecSeroPrev(ov16_pos, 40, 99, probs),
-      H4iii=calcSensSpecSeroPrev(ov16_pos_mating_any_mf, 50, 99, probs)
-    ) %>% pivot_longer(
-      cols=c(H4iii), names_to="Hypothesis", values_to = "ov16_prev"
-    ) %>% 
-    select(run_num, Hypothesis, ov16_prev, age_groups)
-  )
-
-tmp2 <- tmp %>% group_by(run_num) %>% mutate(
-      H1iii=calcSensSpecSeroPrev(ov16_pos_l3, 40, 99, probs),
-      H2iii=calcSensSpecSeroPrev(ov16_pos_l4, 40, 99, probs),
-      H3iii=calcSensSpecSeroPrev(ov16_pos, 40, 99, probs),
-      H4iii=calcSensSpecSeroPrev(ov16_pos_mating_any_mf, 50, 99, probs)
-    ) %>% pivot_longer(
-      cols=c(H1iii, H2iii, H3iii, H4iii), names_to="Hypothesis", values_to = "ov16_prev"
-    ) %>% 
-    select(run_num, Hypothesis, ov16_prev, age_groups) %>% mutate(
-      age_groups = factor(age_groups),
-      Hypothesis = factor(Hypothesis)
-      ) %>% as.data.frame()
-
-glmer(ov16_prev ~ (1 + Hypothesis | age_groups), data=tmp2, family=poisson)
-
-```
-
-### [DEPRECATED] Make Adjusted Plot
-```{r}
-if (make_old_graphs) {
-  make_adjusted_plot <- function(df1, df2, compValLabel, compVal1, compVal2, df3, label="a)", desc="") {
-  
-  
-  df2$Hypothesis <- factor(df2$Hypothesis, levels = c("L3 exposure", "L4-L5 moult", "Any worm", "Any Adult worm", "Mating worm pair", "Mating worm pair with any mf", "Mating worm pair with detectable mf"), ordered=TRUE)
-  #color_vals <- c("L3 exposure"="green", "L4-L5 moult"="blue", "Any worm"="red", "Mating worm pair"="red", "Mating worm pair with any mf"="green", "Mating worm pair with detectable mf"="blue")
-   color_vals <- c("Actual Data"="black", "Any worm"="blue", "Any Adult worm"="blue", "L3 exposure"="purple", "L4-L5 moult"="#6366f2", "Mating worm pair"="brown", "Mating worm pair with any mf"="red", "Mating worm pair with detectable mf"="orange")
-  df3$Hypothesis <- factor(df3$Hypothesis, levels = c("L3 exposure", "L4-L5 moult", "Any worm", "Mating worm pair", "Mating worm pair with any mf", "Mating worm pair with detectable mf"), ordered=TRUE)
-  
-  plotLineTypes <- c("L3 exposure"="dashed", "L4-L5 moult"="dashed", "Any worm"="dashed", "Any Adult worm"="dashed", "Mating worm pair"="dotted", "Mating worm pair with any mf"="dotted", "Mating worm pair with detectable mf"="dotted")
-  
-  plotLineTypes <- c("L3 exposure"="dashed", "L4-L5 moult"="dashed", "Any worm"="dashed", "Any Adult worm"="dashed", "Mating worm pair"="dashed", "Mating worm pair with any mf"="dashed", "Mating worm pair with detectable mf"="dashed")
-  
-  plot <- ggplot() + geom_point(aes(x=age_groups, y=ov16_prev_rdt*100), alpha=0.5, color="black", size=0.5, data=df1) +
-    geom_errorbar(aes(x=age_groups, ymin=(ov16_wilson_lb*100), ymax=(ov16_wilson_ub*100)), width=2.5, alpha=0.5, colour="black", data=df1) +
-    
-    geom_line(aes(x=age_groups, y=ov16_prev*100, color=Hypothesis, linetype=Hypothesis, alpha=1), linewidth=1.1, data=df2) +
-    
-    geom_line(aes(x=age_groups, y=ov16_prev*100, color=Hypothesis, linetype=Hypothesis, alpha=0.5), linewidth=1.1, data=df3) +
-    
-    scale_color_manual(name="Hypotheses", values=color_vals) +
-    scale_linetype_manual(name="Hypotheses", values=plotLineTypes) +
-    theme_bw() +
-    ggtitle(paste(label))+#, "Gabon Seroprevalence Projections", desc)) +
-    xlab("Age (years)") +
-    ylab("Ov16 Seroprevalence (%)") +
-    scale_alpha(compValLabel, labels=c(compVal2, compVal1), breaks=c(0.5, 0.9), range=c(0.3, 1))
-  return(plot)
-}
-
-for (elisa_sens_spec_vec in elisa_sens_spec_vec_list) {
-  sens_spec_val <- paste(elisa_sens_spec_vec, collapse="_")
-  adjust_comp_100_mount_k2_1 <- make_adjusted_plot(summarize_gabon_multicountry_data, simulation_summary_elisa_100_mount %>% filterHypotheses(), "Diagnostic Adjustment", "No", "Yes", base_k2_list[[sens_spec_val]] %>% filterHypotheses()) + ylim(0,51)
-  
-  adjust_comp_100_mount_k2_2 <- make_adjusted_plot(summarize_gabon_multicountry_data, base_k2_list[[sens_spec_val]] %>% filterHypotheses(), "Diagnostic Adjustment", "No", "Yes", base_k2_list[[sens_spec_val]] %>% filterHypotheses(), label="") + ylim(0,25) + theme(legend.direction = "horizontal", legend.position = "bottom") + guides(alpha="none")
-  
-  #ggsave("images/gabon_just_adjusted_new_paper.png",adjust_comp_100_mount_k2_2, width=4250, height=3000, units="px", dpi=450)
-  
-  arranged_graph <- ((adjust_comp_100_mount_k2_1 + theme(legend.direction = "horizontal") + guides(alpha="none")) | (adjust_comp_100_mount_k2_2 + theme(legend.direction = "horizontal", axis.title.y=element_blank()) +  guides(alpha="none") + ggtitle("b)"))) + plot_layout(guides = "collect") + plot_annotation(
-    theme = theme(legend.position = "bottom",
-                  legend.direction = "horizontal")
-  )
-  #ggsave("images/gabon_adjust_comp_new_paper.png",arranged_graph, width=8500, height=6000, units="px", dpi=900)
-  
-  trig_sero_k2_1 <- make_adjusted_plot(summarize_gabon_multicountry_data, sero_trigger_k2_list[[sens_spec_val]] %>% filterHypotheses(), "Seroreversion", "Yes", "No", sero_trigger_k2_list[[sens_spec_val]] %>% filterHypotheses(), "b)", "w/ Seroreversion")
-  
-  inf_sero_k2_1 <- make_adjusted_plot(summarize_gabon_multicountry_data, sero_no_inf_k2_list[[sens_spec_val]] %>% filterHypotheses(), "Seroreversion", "Yes", "No", sero_no_inf_k2_list[[sens_spec_val]] %>% filterHypotheses(), "c)", "w/ Seroreversion")
-  
-  arranged_seroreversion_graph <- ((adjust_comp_100_mount_k2_2 + ggtitle("a)") + ylim(0, 25) + theme(legend.direction = "horizontal") + guides(alpha="none")) | (trig_sero_k2_1 + ylim(0, 25) + theme(legend.direction = "horizontal", axis.title.y=element_blank()) + guides(alpha="none", color="none", linetype="none")) | (inf_sero_k2_1 + ylim(0, 25) + theme(legend.direction = "horizontal", axis.title.y=element_blank()) + guides(alpha="none", color="none", linetype="none"))) + plot_layout(guides = "collect") + plot_annotation(
-    theme = theme(legend.position = "bottom",
-                  legend.direction = "horizontal")
-  )
-  print(arranged_seroreversion_graph)
-  #ggsave(paste0("images/gabon_rdt_k2_sero_mount_fig_paper", sens_spec_val,".png"), arranged_seroreversion_graph, width=8250, height = 4000, units="px", dpi=900)
-  #ggsave("images/gabon_k2_sero_mount_fig_paper.png", arranged_seroreversion_graph, width=8250, height = 4000, units="px", dpi=900)
-  
-  #make_adjusted_plot(summarize_gabon_multicountry_data, simulation_summary_sens_spec_elisa_100_mount, kE, "0.2", "0.3", simulation_summary_sens_spec_elisa_100_mount_k3)
-}
-}
-```
-
-
-### [DEPRECATED] Adjusted-Plot diff sens/spec
-```{r}
-if (make_old_graphs) {
-  make_adjusted_plot_sens_spec <- function(df1, df2, label="a)", desc="", combine_pre_patent=FALSE, combine_pre_adult_worm=FALSE, row_pre_patent=FALSE, sero_val="i", ylim=45) {
-    df1 <- df1 %>% filter(age_groups != 0.0)
-    tmp_df_holder <- list()
-    facet_sens_spec = FALSE
-    if(typeof(df2) == "list") {
-      facet_sens_spec = TRUE
-      for(val in names(df2)) {
-        sens_spec_vals = as.numeric(strsplit(val, "_")[[1]])
-        tmp <- df2[[val]] %>% mutate(sens = paste0(round(sens_spec_vals[1] * 100), "%"), spec = paste0(round(sens_spec_vals[2] * 100), "%")) %>% filterHypotheses()
-        if (combine_pre_patent) {
-          tmp <- tmp %>% mutate(
-            Hypothesis = ifelse(Hypothesis == "Mating worm pair with any mf", paste0("H4", sero_val), paste0("H1", sero_val, "-3", sero_val))
-            ) %>% 
-            group_by(age_groups, Hypothesis, sens, spec) %>% 
-            summarise(across(where(is.numeric), mean), .groups="drop")
-        }
-        if (combine_pre_adult_worm) {
-          tmp <- tmp %>% mutate(
-            Hypothesis = ifelse(
-              Hypothesis == "Mating worm pair with any mf", 
-              paste0("H4", sero_val), 
-              ifelse(
-                Hypothesis == "Any Adult worm",
-                paste0("H3", sero_val),
-                paste0("H1", sero_val, "-2", sero_val)
-              )
-            )) %>% 
-            group_by(age_groups, Hypothesis, sens, spec) %>% 
-            summarise(across(where(is.numeric), mean), .groups="drop")
-        }
-        if(length(tmp_df_holder) == 0) {
-          tmp_df_holder <- tmp
-        } else {
-          tmp_df_holder <- rbind(tmp_df_holder, tmp)
-        }
-      }
-    }
-    df2 = tmp_df_holder %>% mutate(
-      ov16_upper = ifelse(
-        ov16_upper*100 > ylim,
-        ylim/100,
-        ov16_upper
-      ),
-      ov16_upper = ifelse(
-        age_groups == 0,
-        ov16_prev,
-        ov16_upper
-      ),
-      ov16_lower = ifelse(
-        age_groups == 0,
-        ov16_prev,
-        ov16_lower
-      )
-    )
-  
-    df2$Hypothesis <- factor(df2$Hypothesis, levels = c("L3 exposure", "L4-L5 moult", "Any worm", "Any Adult worm", "Pre-Patent Infection", "Mating worm pair", "Mating worm pair with any mf", "Mating worm pair with detectable mf", "H1-3", "H4", "H1i-3i", "H4i", "H1ii-2ii", "H3ii", "H1ii-3ii", "H4ii", "H1iii-3iii", "H4iii"), ordered=TRUE)
-  
-     color_vals <- c("Actual Data"="black", "Any worm"="blue", "Any Adult worm"="blue", "L3 exposure"="purple", "L4-L5 moult"="#6366f2", "Pre-Patent Infection"="blue", "Mating worm pair"="brown", "Mating worm pair with any mf"="red", "Mating worm pair with detectable mf"="orange", "H1-3"="blue", "H4"="red", "H1-3i"="blue", "H4i"="red", "H1-3ii"="blue", "H4ii"="red", "H1-3iii"="blue", "H4iii"="red")
-     
-      color_vals <- c("Actual Data"="black", "Any worm"="blue", "Any Adult worm"="blue", "L3 exposure"="purple", "L4-L5 moult"="darkgreen", "Pre-Patent Infection"="blue", "Mating worm pair"="brown", "Mating worm pair with any mf"="red", "Mating worm pair with detectable mf"="orange", "H1-3"="blue", "H4"="red", "H1i-3i"="blue", "H4i"="red", "H1ii-3ii"="blue", "H4ii"="red", "H1iii-3iii"="blue", "H4iii"="red", "H1ii-2ii"="purple", "H3ii" ="blue")
-     
-    plotLineTypes <- c("L3 exposure"="dashed", "L4-L5 moult"="dashed", "Any worm"="dashed", "Any Adult worm"="dashed", "Pre-Patent Infection"="solid", "Mating worm pair"="dashed", "Mating worm pair with any mf"="dashed", "Mating worm pair with detectable mf"="dashed")
-    
-    if(combine_pre_patent | row_pre_patent) {
-        plotLineTypes <- c("L3 exposure"="solid", "L4-L5 moult"="solid", "Any worm"="solid", "Any Adult worm"="solid", "Pre-Patent Infection"="solid", "Mating worm pair"="solid", "Mating worm pair with any mf"="solid", "Mating worm pair with detectable mf"="solid", "H1-3"="solid", "H4"="solid", "H1i-3i"="solid", "H4i"="solid", "H1ii-3ii"="solid", "H4ii"="solid", "H1iii-3iii"="solid", "H4iii"="solid")
-    }
-    if (combine_pre_adult_worm) {
-      plotLineTypes <- c("L3 exposure"="solid", "L4-L5 moult"="solid", "Any worm"="solid", "Any Adult worm"="solid", "Pre-Patent Infection"="solid", "Mating worm pair"="solid", "Mating worm pair with any mf"="solid", "Mating worm pair with detectable mf"="solid", "H1-3"="solid", "H4"="solid", "H1i-3i"="solid", "H4i"="solid", "H1ii-3ii"="solid", "H4ii"="solid", "H1ii-2ii"="solid", "H3ii" ="solid",  "H1iii-3iii"="solid", "H4iii"="solid")
-    }
-    
-    plot <- ggplot() + geom_point(aes(x=age_groups, y=ov16_prev_rdt*100), alpha=0.5, color="black", size=0.5, data=df1) +
-      geom_errorbar(aes(x=age_groups, ymin=(ov16_wilson_lb*100), ymax=(ov16_wilson_ub*100)), width=2.5, alpha=0.5, colour="black", data=df1)
-    
-    if(row_pre_patent) {
-      pre_patent_hyp <- df2 %>% filter(Hypothesis != "Mating worm pair with any mf") %>% mutate(
-        pre_patent_hyp = Hypothesis
-      )
-      patent_hyp <- list()
-      for(pre_patent_hyp_val in unique(pre_patent_hyp$Hypothesis)) {
-        if(length(patent_hyp) == 0) {
-          patent_hyp <- df2 %>% filter(Hypothesis == "Mating worm pair with any mf") %>% mutate(pre_patent_hyp = pre_patent_hyp_val)
-        } else {
-          patent_hyp <- rbind(patent_hyp, df2 %>% filter(Hypothesis == "Mating worm pair with any mf") %>% mutate(pre_patent_hyp = pre_patent_hyp_val))
-        }
-      }
-      df2 <- rbind(pre_patent_hyp, patent_hyp)
-      list_of_plots <- list()
-      for(spec_val in unique(df2$spec)) {
-        list_of_plots[[as.character(spec_val)]] <- plot +
-          geom_line(aes(x=age_groups, y=ov16_prev*100, color=Hypothesis, linetype=Hypothesis, alpha=1), linewidth=0.6, data=df2 %>% filter(spec == spec_val)) +
-          scale_color_manual(name="Hypotheses", values=color_vals) +
-          scale_linetype_manual(name="Hypotheses", values=plotLineTypes) +
-          theme_bw() +
-          #ggtitle(paste(label)) +
-          xlab("Age (years)") +
-          ylab("Ov16 Seroprevalence (%)") +
-          guides(alpha="none", color=guide_legend(nrow=2)) +
-          theme(
-            legend.position = "bottom",
-            legend.direction = "horizontal"
-            ) +
-          facet_grid(sens ~ pre_patent_hyp)
-      }
-      return(list_of_plots)
-    }
-    plot <- plot + geom_line(aes(x=age_groups, y=ov16_prev*100, color=Hypothesis, linetype=Hypothesis, alpha=1), linewidth=0.6, data=df2) +
-      geom_ribbon(aes(x=age_groups, ymin=ov16_lower*100, ymax=ov16_upper*100, fill=Hypothesis), color=NA, alpha=0.1, data=df2) +
-      scale_color_manual(name="Hypotheses", values=color_vals) +
-      scale_fill_manual(name="Hypotheses", values=color_vals) +
-      scale_linetype_manual(name="Hypotheses", values=plotLineTypes) +
-      theme_bw() +
-      #ggtitle(paste(label)) +
-      xlab("Age (years)") +
-      ylab("Anti-Ov16 seroprevalence (%)") +
-      scale_y_continuous(
-        limits=c(0, ylim), 
-        breaks=seq(0, 40, 10),
-        sec.axis = sec_axis(~ . , name = "Sensitivity", breaks = NULL, labels = NULL)
-      ) +
-      guides(alpha="none", color=guide_legend(nrow=1)) +
-      theme(
-        legend.position = "bottom",
-        legend.direction = "horizontal",
-        plot.title = element_text(size=10, hjust = 0.5),
-        axis.title.y = element_text(size=10),
-        title = element_text(size=10),
-        legend.text = element_text(size=6),
-        legend.title = element_text(size=8),
-        legend.key.size = unit(0.8, 'lines'),
-        axis.text.y = element_text(size=6),
-        axis.text.x = element_text(size=6),
-        strip.placement = "outside",
-        panel.grid.minor = element_blank(),
-        axis.line.x = element_line(color = "black"),
-        axis.line.y = element_line(color = "black"),
-        strip.text.y = element_text(angle=0),
-        axis.line.y.right = element_blank()
-      )
-    if (facet_sens_spec) {
-      plot <- plot + facet_grid(sens ~ spec) +
-        ggtitle("Specificity")
-    }
-    return(plot)
-  }
-  
-  #sens_spec_all_hyp <- make_adjusted_plot_sens_spec(summarize_gabon_multicountry_data, base_k3_list, ylim=42)
-  #sens_spec_all_hyp
-  #ggsave(paste0("images/images_", output_version,"/gabon_rdt_sens_spec_k3.png"), sens_spec_all_hyp, units="in", height=4, width=5.5, dpi=300)
-  
-  ### ke = 0.3
-  sens_spec_combine_pre_patent <- make_adjusted_plot_sens_spec(summarize_gabon_multicountry_data, base_k3_list, combine_pre_patent=TRUE, sero_val = "i", ylim=42)
-  sens_spec_combine_pre_patent
-  ggsave(paste0("images/images_", output_version,"/gabon_rdt_sens_spec_pre_patent_combined_k3.svg"), sens_spec_combine_pre_patent, units="in", height=4, width=5.5, dpi=300)
-  
-  sero_no_inf_sens_spec_all_hyp <- make_adjusted_plot_sens_spec(summarize_gabon_multicountry_data, sero_no_inf_k3_list, combine_pre_patent = TRUE, sero_val = "iii", ylim=42)
-  sero_no_inf_sens_spec_all_hyp
-  ggsave(paste0("images/images_", output_version,"/gabon_rdt_sens_spec_pre_patent_combined_sero_no_inf_k3.svg"), sero_no_inf_sens_spec_all_hyp, units="in", height=4, width=5.5, dpi=300)
-  
-  sero_trigger_sens_spec_all_hyp <- make_adjusted_plot_sens_spec(summarize_gabon_multicountry_data, sero_trigger_k3_list, combine_pre_patent = FALSE, combine_pre_adult_worm = TRUE, sero_val = "ii", ylim=42)
-  sero_trigger_sens_spec_all_hyp
-  ggsave(paste0("images/images_", output_version,"/gabon_rdt_sens_spec_pre_patent_not_combined_sero_trigger_k3.svg"), sero_trigger_sens_spec_all_hyp, units="in", height=4, width=5.5, dpi=600)
-  
-  #sens_spec_row_pre_patent <- make_adjusted_plot_sens_spec(summarize_gabon_multicountry_data, base_k3_list, row_pre_patent=TRUE)
-  #for (spec in names(sens_spec_row_pre_patent)) {
-  #  ggsave(paste0("images/images_", output_version,"/gabon_rdt_sens_", as.character(spec), "_spec_col_pre_patent_k3.png"), sens_spec_row_pre_patent[[spec]], units="in", height=4, width=5.5, dpi=300)
-  #}
-  
-  ### ke = 0.2
-  
-  sens_spec_combine_pre_patent <- make_adjusted_plot_sens_spec(summarize_gabon_multicountry_data, base_k2_list, combine_pre_patent=TRUE, sero_val = "i", ylim=42)
-  sens_spec_combine_pre_patent
-  ggsave(paste0("images/images_", output_version,"/gabon_rdt_sens_spec_pre_patent_combined_k2.svg"), sens_spec_combine_pre_patent, units="in", height=4, width=5.5, dpi=300)
-  
-  sero_no_inf_sens_spec_all_hyp <- make_adjusted_plot_sens_spec(summarize_gabon_multicountry_data, sero_no_inf_k2_list, combine_pre_patent = TRUE, sero_val = "iii", ylim=42)
-  sero_no_inf_sens_spec_all_hyp
-  ggsave(paste0("images/images_", output_version,"/gabon_rdt_sens_spec_pre_patent_combined_sero_no_inf_k2.png"), sero_no_inf_sens_spec_all_hyp, units="in", height=4, width=5.5, dpi=300)
-  
-  sero_trigger_sens_spec_all_hyp <- make_adjusted_plot_sens_spec(summarize_gabon_multicountry_data, sero_trigger_k2_list, combine_pre_patent = FALSE, combine_pre_adult_worm = TRUE, sero_val = "ii", ylim=42)
-  sero_trigger_sens_spec_all_hyp
-  ggsave(paste0("images/images_", output_version,"/gabon_rdt_sens_spec_pre_patent_not_combined_sero_trigger_k2.png"), sero_trigger_sens_spec_all_hyp, units="in", height=4, width=5.5, dpi=300)
-}
 ```

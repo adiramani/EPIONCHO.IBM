@@ -35,7 +35,7 @@ knitr::knit_hooks$set(timeit = local({
 ```{r simulation_processing_functions}
 processRCSFiles <- function (files='ov16_gabon_4/', verbose=TRUE, onlyCalcMFP=FALSE) {
   allOutputs <- data.frame()
-  fileToUse <- paste("data/", files, sep="")
+  fileToUse <- paste(files, sep="")
 
   i <- 1
   mda_vals <- c()
@@ -235,11 +235,12 @@ for(mfp in mfp_vals) {
   target_mfp_str <- strsplit(fileNameMFP, "_")[[1]][5]
   target_mfp <- as.numeric(target_mfp_str)/100
   kval <- strsplit(fileNameMFP, "_")[[1]][4]
-  tmp <- processRCSFiles(paste(fileNameMFP,"/",sep=""), verbose=FALSE, onlyCalcMFP=TRUE)
+  tmp <- processRCSFiles(paste("/Volumes/Beep/togo_mfp_tuning_k3_70_final/", fileNameMFP,"/",sep=""), verbose=FALSE, onlyCalcMFP=TRUE)
   tmpDf <- data.frame(abr_vals=tmp$abr_vals, mf_prev=tmp$mf_prev)
   tmpmfpvals <- rbind(tmpmfpvals, tmpDf)
 }
 ```
+
 #### Helping functions
 
 ```{r calc_mfp, timeit=TRUE}
@@ -316,9 +317,10 @@ getRangeOfABR <- function(data, target_mfp, extra=0.002, raw_data=data.frame(), 
       plot <- ggplot() +
         geom_histogram(aes(x=abr_vals), color='darkblue', fill="lightblue", binwidth=bin_size, boundary = 0, closed="left", data=raw_data) +
         geom_line(aes(x=x, y=y), color="red", data=fitted_data) +
-        scale_x_continuous(breaks=seq(min_val, max_val, break_val), limits=c(min_val, max_val)) + ylab('Count') + 
+        scale_x_continuous("ABR Values", breaks=seq(min_val, max_val, break_val), limits=c(min_val, max_val)) + ylab('Count') + 
         #ggtitle(paste('Distribution for', k_value_print, 'of ABR for an MFP of ', target_mfp*100,"%")) + 
-        xlab("ABR Values")
+        theme_bw() +
+        ggtitle(paste0("Target Microfilarial Prevalence: ", target_mfp*100 , "% - ", target_mfp*100+1, "%"))
     }
   }
   return_val <- list(plot)
@@ -432,6 +434,7 @@ gamma_vals <- list(c(20.12, 0.0077), c(14.69, 0.0032), c(7.09, 0.00029))
 #gamma_vals <- list(c(38.8, 0.020), c(27.1, 0.0094), c(12.3, 0.0014))
 
 i <- 0
+all_plots <- list()
 for(mfp in c(70, 75, 85)) {
   size <- 500
   if(kval=="k4" & mfp == 70) {
@@ -449,6 +452,14 @@ for(mfp in c(70, 75, 85)) {
 
   range_return <- getRangeOfABR(summarized_abr_mfp, target_mfp, raw_data=raw_data_vals, kval=kval, dist_name = 'gamma', dist_func = dgamma, dist_manual=gamma_vals[[i]], bin_size = size)
   print(range_return[[1]])
-  ggsave(paste("images/", "final_gamma_abr_dist_", kval, "_", target_mfp_str, ".png", sep=""), range_return[[1]], width=5000, height = 4000, units="px", dpi=600)
+  all_plots[[paste0(mfp)]] <- range_return[[1]]
+  ggsave(paste("../images/", "final_gamma_abr_dist_", kval, "_", target_mfp_str, ".png", sep=""), range_return[[1]], width=5000, height = 4000, units="px", dpi=600)
 }
+
+library(patchwork)
+
+final_plot <- (all_plots[["70"]] / all_plots[["85"]]) + plot_layout(axis_titles="collect")
+
+ggsave(paste("../images/", "final_gamma_abr_dist_", kval, "_mfp_70_85.png", sep=""), final_plot, width=7000, height = 4000, units="px", dpi=600)
+
 ```

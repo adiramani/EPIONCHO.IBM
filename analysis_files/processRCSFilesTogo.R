@@ -1,5 +1,5 @@
 library(dplyr)
-processRCSFiles <- function (files='/rds/general/user/ar722/home/ov16_test/ov16_output_bassar_mean_age/', which_timestep=2, verbose=TRUE, onlyCalcMFP=FALSE, useSerorevert=FALSE, onlyCalcOv16Trends=FALSE) {
+processRCSFiles <- function (files='/path/to/model/', which_timestep=2, verbose=TRUE, onlyCalcMFP=FALSE, useSerorevert="none", onlyCalcOv16Trends=FALSE) {
   allOutputs <- data.frame()
   fileToUse <- files#paste("data/", files, sep="")
 
@@ -11,6 +11,7 @@ processRCSFiles <- function (files='/rds/general/user/ar722/home/ov16_test/ov16_
   start_time <- Sys.time() 
   mf_prev_df <- data.frame()
   ov16_trend_df <- matrix(ncol=5, nrow=0)
+  ov16_serorevert_trend_df <- matrix(ncol=5, nrow=0)
   for (file in list.files(fileToUse)) {
     if(verbose) {
       if ((i %% floor(total_files/10)) == 0) {
@@ -26,6 +27,9 @@ processRCSFiles <- function (files='/rds/general/user/ar722/home/ov16_test/ov16_
       message(paste("Error occurred while reading:", fileToUse))
     }
     )
+
+    file_parts <- unlist(strsplit(file, "_"))
+    run_num <- as.numeric(sub("\\.rds$", "", file_parts[length(file_parts)]))
     
     mf_prev_vals <- c(mf_prev_vals, tmpRDSData$mf_prev[(119/(1/366))])
     mda_vals <- c(mda_vals, tmpRDSData$MDA)
@@ -33,32 +37,53 @@ processRCSFiles <- function (files='/rds/general/user/ar722/home/ov16_test/ov16_
     vctr.ctrl.val = tmpRDSData$vctr.ctrl.eff
     if(onlyCalcOv16Trends) {
       sero_prev_vals <- tmpRDSData$ov16_seroprevalence[c(1,seq(from=183, to=length(tmpRDSData$ov16_seroprevalence), by=183))]
+      serorev_prev_vals <- tmpRDSData$ov16_seroprevalence_sero[c(1,seq(from=183, to=length(tmpRDSData$ov16_seroprevalence_sero), by=183))]
       total_sero_vals <- length(sero_prev_vals)
       if(i == 1) {
         ov16_trend_df <- matrix(ncol=5, nrow=total_files*total_sero_vals)
         colnames(ov16_trend_df) <- c("ABR", "vctr.ctrl.eff", "Ke", "run_num", "ov16_vals")
+        ov16_serorevert_trend_df <- matrix(ncol=5, nrow=total_files*total_sero_vals)
+        colnames(ov16_serorevert_trend_df) <- c("ABR", "vctr.ctrl.eff", "Ke", "run_num", "ov16_vals")
       }
       ov16_trend_df[(1+(total_sero_vals*(i-1))):(i*total_sero_vals),1] <- rep(tmpRDSData$ABR, total_sero_vals)
       ov16_trend_df[(1+(total_sero_vals*(i-1))):(i*total_sero_vals),2] <- rep(vctr.ctrl.val, total_sero_vals)
       ov16_trend_df[(1+(total_sero_vals*(i-1))):(i*total_sero_vals),3] <- rep(tmpRDSData$Ke, total_sero_vals)
-      ov16_trend_df[(1+(total_sero_vals*(i-1))):(i*total_sero_vals),4] <- rep(i,total_sero_vals)
+      ov16_trend_df[(1+(total_sero_vals*(i-1))):(i*total_sero_vals),4] <- rep(run_num, total_sero_vals)
       ov16_trend_df[(1+(total_sero_vals*(i-1))):(i*total_sero_vals),5] <- sero_prev_vals
+
+      ov16_serorevert_trend_df[(1+(total_sero_vals*(i-1))):(i*total_sero_vals),1] <- rep(tmpRDSData$ABR, total_sero_vals)
+      ov16_serorevert_trend_df[(1+(total_sero_vals*(i-1))):(i*total_sero_vals),2] <- rep(vctr.ctrl.val, total_sero_vals)
+      ov16_serorevert_trend_df[(1+(total_sero_vals*(i-1))):(i*total_sero_vals),3] <- rep(tmpRDSData$Ke, total_sero_vals)
+      ov16_serorevert_trend_df[(1+(total_sero_vals*(i-1))):(i*total_sero_vals),4] <- rep(run_num, total_sero_vals)
+      ov16_serorevert_trend_df[(1+(total_sero_vals*(i-1))):(i*total_sero_vals),5] <- serorev_prev_vals
       i <- i + 1
       next
     }
     if(onlyCalcMFP) {
+      curr_mf_prev_vals <- tmpRDSData$mf_prev[c(1,seq(from=183, to=length(tmpRDSData$mf_prev), by=183))]
+      total_mf_prev_vals <- length(curr_mf_prev_vals)
       if(i == 1) {
-        mf_prev_df <- data.frame(matrix(ncol=7, nrow=total_files))
-        colnames(mf_prev_df) <- c("ABR", "Ke", "vctr.ctrl.eff", "run_num", "mf_prev_start_2015", "mf_prev_mid_2015", "mf_prev_after_2015")
+        # mf_prev_df <- data.frame(matrix(ncol=7, nrow=total_files))
+        # colnames(mf_prev_df) <- c("ABR", "Ke", "vctr.ctrl.eff", "run_num", "mf_prev_start_2015", "mf_prev_mid_2015", "mf_prev_after_2015")
+        mf_prev_df <- data.frame(matrix(ncol=5, nrow=total_files*total_mf_prev_vals))
+        colnames(mf_prev_df) <- c("ABR", "Ke", "vctr.ctrl.eff", "run_num", "mf_prev")
+      
       }
-      mf_prev_df[i,] <- list(tmpRDSData$ABR, tmpRDSData$Ke, vctr.ctrl.val, i, tmpRDSData$mf_prev[(119/(1/366) - 1)], tmpRDSData$mf_prev[(119/(1/366) + 0.5/(1/366))], tmpRDSData$mf_prev[(119/(1/366) + 1/(1/366))])
+      #mf_prev_df[i,] <- list(tmpRDSData$ABR, tmpRDSData$Ke, vctr.ctrl.val, i, tmpRDSData$mf_prev[(119/(1/366) - 1)], tmpRDSData$mf_prev[(119/(1/366) + 0.5/(1/366))], tmpRDSData$mf_prev[(119/(1/366) + 1/(1/366))])
+      mf_prev_df[(1+(total_mf_prev_vals*(i-1))):(i*total_mf_prev_vals),1] <- rep(tmpRDSData$ABR, total_mf_prev_vals)
+      mf_prev_df[(1+(total_mf_prev_vals*(i-1))):(i*total_mf_prev_vals),2] <- rep(tmpRDSData$Ke, total_mf_prev_vals)
+      mf_prev_df[(1+(total_mf_prev_vals*(i-1))):(i*total_mf_prev_vals),3] <- rep(vctr.ctrl.val, total_mf_prev_vals)
+      mf_prev_df[(1+(total_mf_prev_vals*(i-1))):(i*total_mf_prev_vals),4] <- rep(run_num, total_mf_prev_vals)
+      mf_prev_df[(1+(total_mf_prev_vals*(i-1))):(i*total_mf_prev_vals),5] <- curr_mf_prev_vals
       i <- i + 1
       next
     }
     
     matrix_to_use <- tmpRDSData$ov16_seropositive_matrix
-    if(useSerorevert) {
+    if(useSerorevert == "finite") {
       matrix_to_use <- tmpRDSData$ov16_seropositive_matrix_serorevert
+    } else if (useSerorevert == "instant") {
+      matrix_to_use <- tmpRDSData$ov16_seropositive_matrix_serorevert_instant
     }
     
     age <- matrix_to_use[,which_timestep*9-8]
@@ -73,7 +98,7 @@ processRCSFiles <- function (files='/rds/general/user/ar722/home/ov16_test/ov16_
 
     tmpNumRows <- length(age)
     if(i == 1) {
-      if(useSerorevert) {
+      if(useSerorevert != "none") {
         allOutputs <- data.frame(matrix(ncol=14, nrow=tmpNumRows*total_files))
         colnames(allOutputs) <- c("age", "sex", "ov16_pos", "ov16_pos_l3", "ov16_pos_l4", "ov16_pos_mating_no_mf", "ov16_pos_mating_detectable_mf", "ov16_pos_mating_any_mf", "mf_prev", "ABR", "Ke", "vctr.ctrl.eff", "sero_type", "run_num")
       } else {
@@ -84,12 +109,12 @@ processRCSFiles <- function (files='/rds/general/user/ar722/home/ov16_test/ov16_
 
     startIndex <- 1+tmpNumRows*(i-1)
     endIndex <- tmpNumRows*i
-    if(useSerorevert) {
+    if(useSerorevert != "none") {
         allOutputs[startIndex:endIndex,-14] <- list(age, sex, ov16_seropos, ov_l3, ov_l4, ov_mating_no_mf, ov_mating_detectable_mf, ov_mating_any_mf, mf_prev, rep(tmpRDSData$ABR, tmpNumRows), rep(tmpRDSData$Ke, tmpNumRows), rep(vctr.ctrl.val, tmpNumRows),rep("no_infection", tmpNumRows))
-        allOutputs[startIndex:endIndex,14] <- i
+        allOutputs[startIndex:endIndex,14] <- run_num
     } else {
         allOutputs[startIndex:endIndex,-13] <- list(age, sex, ov16_seropos, ov_l3, ov_l4, ov_mating_no_mf, ov_mating_detectable_mf, ov_mating_any_mf, mf_prev, rep(tmpRDSData$ABR, tmpNumRows), rep(tmpRDSData$Ke, tmpNumRows), rep(vctr.ctrl.val, tmpNumRows))
-        allOutputs[startIndex:endIndex,13] <- i
+        allOutputs[startIndex:endIndex,13] <- run_num
     }
 
     i <- i + 1
@@ -99,8 +124,8 @@ processRCSFiles <- function (files='/rds/general/user/ar722/home/ov16_test/ov16_
   print(paste("Avg MDA Years:", mean(mda_vals)))
 
   if(onlyCalcOv16Trends) {
-    ov16Return <- list(ov16_trend_df)
-    names(ov16Return) <- c("ov16_trend_df")
+    ov16Return <- list(ov16_trend_df, ov16_serorevert_trend_df)
+    names(ov16Return) <- c("ov16_trend_df", "ov16_serorevert_trend_df")
     return(ov16Return)
   }
 
@@ -153,18 +178,28 @@ processRCSFiles <- function (files='/rds/general/user/ar722/home/ov16_test/ov16_
   return(returnVal)
 }
 
-saveRDS(processRCSFiles(onlyCalcMFP = TRUE), "/rds/general/user/ar722/home/ov16_test/bassar_agg_data/togo_bassar_mfp_data.RDS")
+# TODO: replace all instances of {prefecture} with the prefecture you are processing.
 
-saveRDS(processRCSFiles(which_timestep=2), "/rds/general/user/ar722/home/ov16_test/bassar_agg_data/togo_bassar_100_mount_data_start_2015.RDS")
+saveRDS(processRCSFiles(onlyCalcMFP = TRUE), "/path/where/file/will/be/saved/{prefecture}_agg_data_final_worm_revert_vary_abr/togo_{prefecture}_mfp_trends_data.RDS")
 
-saveRDS(processRCSFiles(which_timestep=2, useSerorevert=TRUE), "/rds/general/user/ar722/home/ov16_test/bassar_agg_data/togo_bassar_seroreversion_data_start_2015.RDS")
+saveRDS(processRCSFiles(onlyCalcOv16Trends=TRUE), "/path/where/file/will/be/saved/{prefecture}_agg_data_final_worm_revert_vary_abr/togo_{prefecture}_ov16_trends.RDS")
 
-saveRDS(processRCSFiles(which_timestep=3), "/rds/general/user/ar722/home/ov16_test/bassar_agg_data/togo_bassar_100_mount_data_mid_2015.RDS")
+saveRDS(processRCSFiles(onlyCalcMFP = TRUE), "/path/where/file/will/be/saved/{prefecture}_agg_data_final_worm_revert_vary_abr/togo_{prefecture}_mfp_data.RDS")
 
-saveRDS(processRCSFiles(which_timestep=3, useSerorevert=TRUE), "/rds/general/user/ar722/home/ov16_test/bassar_agg_data/togo_bassar_seroreversion_data_mid_2015.RDS")
+saveRDS(processRCSFiles(which_timestep=2), "/path/where/file/will/be/saved/{prefecture}_agg_data_final_worm_revert_vary_abr/togo_{prefecture}_100_mount_data_start_2015.RDS")
 
-saveRDS(processRCSFiles(which_timestep=4), "/rds/general/user/ar722/home/ov16_test/bassar_agg_data/togo_bassar_100_mount_data_end_2015.RDS")
+saveRDS(processRCSFiles(which_timestep=2, useSerorevert="finite"), "/path/where/file/will/be/saved/{prefecture}_agg_data_final_worm_revert_vary_abr/togo_{prefecture}_finite_seroreversion_data_start_2015.RDS")
 
-saveRDS(processRCSFiles(which_timestep=4, useSerorevert=TRUE), "/rds/general/user/ar722/home/ov16_test/bassar_agg_data/togo_bassar_seroreversion_data_end_2015.RDS")
+saveRDS(processRCSFiles(which_timestep=2, useSerorevert="instant"), "/path/where/file/will/be/saved/{prefecture}_agg_data_final_worm_revert_vary_abr/togo_{prefecture}_instant_seroreversion_data_start_2015.RDS")
 
-saveRDS(processRCSFiles(onlyCalcOv16Trends=TRUE), "/rds/general/user/ar722/home/ov16_test/bassar_agg_data/togo_bassar_ov16_trends.RDS")
+saveRDS(processRCSFiles(which_timestep=3), "/path/where/file/will/be/saved/{prefecture}_agg_data_final_worm_revert_vary_abr/togo_{prefecture}_100_mount_data_mid_2015.RDS")
+
+saveRDS(processRCSFiles(which_timestep=3, useSerorevert="finite"), "/path/where/file/will/be/saved/{prefecture}_agg_data_final_worm_revert_vary_abr/togo_{prefecture}_finite_seroreversion_data_mid_2015.RDS")
+
+saveRDS(processRCSFiles(which_timestep=3, useSerorevert="instant"), "/path/where/file/will/be/saved/{prefecture}_agg_data_final_worm_revert_vary_abr/togo_{prefecture}_instant_seroreversion_data_mid_2015.RDS")
+
+saveRDS(processRCSFiles(which_timestep=4), "/path/where/file/will/be/saved/{prefecture}_agg_data_final_worm_revert_vary_abr/togo_{prefecture}_100_mount_data_end_2015.RDS")
+
+saveRDS(processRCSFiles(which_timestep=4, useSerorevert="finite"), "/path/where/file/will/be/saved/{prefecture}_agg_data_final_worm_revert_vary_abr/togo_{prefecture}_finite_seroreversion_data_end_2015.RDS")
+
+saveRDS(processRCSFiles(which_timestep=4, useSerorevert="instant"), "/path/where/file/will/be/saved/{prefecture}_agg_data_final_worm_revert_vary_abr/togo_{prefecture}_gradual_seroreversion_data_end_2015.RDS")

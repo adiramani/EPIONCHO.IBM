@@ -1529,12 +1529,20 @@ ep.equi.sim <- function(time.its,
     L3.in <- mean(all.mats.cur[, 6])
 
 
+    ABR_ctrl <- ABR
+    last_change <- -1
+    if (i >= vc.iter.strt && (i %/% 365 > last_change)) {
+      abr_mult <- runif(1, 0.98, 1.02)
+      ABR_ctrl <- ABR_ctrl * abr_mult 
+      last_change <- i %/% 365
+    }
+
+
     # change m based on ABR change due to vector control if called (during vector control duration iteration period)
     if(!is.na(vector.control.strt)){
-
       if (i >= vc.iter.strt && i < vc.iter.stp) {
 
-        ABR_updated <- ABR - (ABR * vector.control.efficacy) # proportional reduction in ABR (x efficacy) during VC
+        ABR_updated <- ABR_ctrl - (ABR_ctrl * vector.control.efficacy) # proportional reduction in ABR (x efficacy) during VC
 
         m = ABR_updated * ((1/104) / 0.63) # update m
       }
@@ -1545,7 +1553,7 @@ ep.equi.sim <- function(time.its,
 
       if (i >= vc.iter.stp) {
 
-        m = ABR * ((1/104) / 0.63) # update m
+        m = ABR_ctrl * ((1/104) / 0.63) # update m
       }
     }
 
@@ -1557,7 +1565,7 @@ ep.equi.sim <- function(time.its,
 
     } else {
 
-      ABR_upd <- ABR
+      ABR_upd <- ABR_ctrl
     }
 
 
@@ -1944,15 +1952,16 @@ ep.equi.sim <- function(time.its,
 
 #### Current file: runModelRCSTogo.R 
 
-iter <- as.numeric(Sys.getenv("PBS_ARRAY_INDEX"))
+# TODO: Set your own index here
+# iter <- as.numeric(Sys.getenv("PBS_ARRAY_INDEX"))
+iter <- #1
 set.seed(iter + (iter*3758))
+# TODO: Change to be keran, bassar, or oti
+prefecture = # "keran"
 
 kEs = c(rep(0.3, 4500), rep(0.4, 4500))
-#seroreversions = rep("absence_of_trigger", 9000)
-#seroreversions = rep("no_infection", 9000)
 
 kE = kEs[iter]
-#sero_val <- seroreversions[iter]
 
 DT.in <- 1/366
 
@@ -1973,7 +1982,7 @@ vctr.control.duration <- 31
 vector.control.efficacies <- rep(rep(c(.60, .75, .90), 4500), 2)
 vctr.control.efficacy <- vector.control.efficacies[iter]
 
-prefecture = "oti"
+
 if(kE == 0.3) {
     if(prefecture == "bassar") {
         ABR.in <- round(rgamma(1, 20.12, .0077)) # 70% Bassar
@@ -2024,9 +2033,6 @@ if(prefecture == "bassar") {
   cstm_treat_params <- list(start_biannual=treat.strt.yrs+12, coverage_changes=c(treat.strt.yrs+5, treat.strt.yrs+10), coverage_change_values=c(mda_1, mda_2, mda_3))
 }
 if(prefecture == "oti") {
-  # treat.strt.yrs = 1991
-  #mda.val <- 15
-  #treat.len = mda.val; treat.strt.yrs = 204; yrs.post.treat = 10
   mda.val <- 24
   vctr.control.duration = 18
   treat.len = mda.val; treat.strt.yrs = 195; yrs.post.treat = 10
@@ -2074,18 +2080,8 @@ output <- ep.equi.sim(time.its = timesteps,
                       no_prev_run=TRUE,
                       custom_treat_params=cstm_treat_params)
 
-if (prefecture == "oti") {
-  if (iter <= 1500) {
-    vctr.control.efficacy = 0.6
-  } else if (iter <= 3000) {
-    vctr.control.efficacy = 0.75
-  } else if (iter <= 4500) {
-    vctr.control.efficacy = 0.90
-  }
-}
 params <- list(mda.val, ABR.in, kE, vctr.control.efficacy)
-
 names(params) <- c('MDA', 'ABR', 'Ke', "vctr.ctrl.eff")
 output <- append(output, params)
 
-saveRDS(output, paste("../ov16_test_togo/ov16_output/ov16_any_worm_output_togo_", prefecture, "_", kE, "_", iter,".rds", sep=""))
+saveRDS(output, paste("path/ov16_any_worm_output_togo_", prefecture, "_", kE, "_", iter,".rds", sep=""))
