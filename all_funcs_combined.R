@@ -1467,7 +1467,7 @@ ep.equi.sim <- function(time.its,
     mls <- which(all.mats.cur[,3] == 1) # matt : ?
     fmls <- which(all.mats.cur[,3] == 0) # matt: ?
 
-    e.f <- Q * 1/(sex.rat*(Q-1) + 1) # 0.9
+    e.f <- 1/(sex.rat*(Q-1) + 1) # 0.9
     e.m <- Q * e.f # 1.08
 
     s.a.exp <- rep(0, N)

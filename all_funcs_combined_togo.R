@@ -1528,14 +1528,14 @@ ep.equi.sim <- function(time.its,
     #mean number of L3 in fly population
     L3.in <- mean(all.mats.cur[, 6])
 
-
-    ABR_ctrl <- ABR
-    last_change <- -1
-    if (i >= vc.iter.strt && (i %/% 365 > last_change)) {
-      abr_mult <- runif(1, 0.98, 1.02)
-      ABR_ctrl <- ABR_ctrl * abr_mult 
-      last_change <- i %/% 365
-    }
+    # Uncomment to vary ABR
+    # ABR_ctrl <- ABR
+    # last_change <- -1
+    # if (i >= vc.iter.strt && (i %/% 365 > last_change)) {
+    #   abr_mult <- runif(1, 0.98, 1.02)
+    #   ABR_ctrl <- ABR_ctrl * abr_mult 
+    #   last_change <- i %/% 365
+    # }
 
 
     # change m based on ABR change due to vector control if called (during vector control duration iteration period)
