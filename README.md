@@ -23,56 +23,41 @@ model, EPIONCHO-IBM: Implications for elimination and data needs. PLoS
 Negl Trop Dis 13(12):
 e0007557](https://doi.org/10.1371/journal.pntd.0007557)
 
-The process overview within EPIONCHO-IBM, describing the steps through a
-model run which reflect changes in the host/vector and parasite
-life-cycle, is presented here:
+EPIONCHO-IBM has been extended to output Ov16 seroprevalence. This README will describe the `Ov16` branch, and how to recreate the model simulations and analyses published (reference to be inserted after publishing) in Nature Communications. To see the original model, please switch to the `master` branch.
 
-<img src='man/figures/oncho_oncho_processflowchart.png' align="below" height="800" />
+The seroprevalence outputed was determined by testing hypotheses for seroconversion (ranging from prepatent to patent) and seroreversion (ranging from instant seroreversion to lifelong immunity). The model outputs the two best fit hypotheses. While both hypotheses assume seroconversion occurs in the presence of a mating worm pair and the production of any microfilariea, they differ in their seroreversion assumptions, one with lifelong immunity, and the other with finite immunity (seroreversion in the absence of infection, defined as the absence of worms and larvae in a host).
+A practical demo can be found in the Running EPIONCHO-IBM Ov16 vignette.
 
-Other publications utilizing and/or developing EPIONCHO-IBM include:
+The analysis done in the paper follows the following steps:
+1. ABR tuning for Gabon
+2. Running simulations for Gabon
+3. Analysing simulations for Gabon
+4. ABR tuning for Togo
+5. Running simulations for Togo
+6. Analysing simulations for Togo
 
-[Hamley JID, Walker M, Coffeng LE, Milton P, de Vlas SJ, Stolk WA,
-Basáñez MG. Structural Uncertainty in Onchocerciasis Transmission Models
-Influences the Estimation of Elimination Thresholds and Selection of Age
-Groups for Seromonitoring. J Infect Dis. 2020 Jun 11;221(Suppl
-5):S510-S518.](https://doi.org/10.1093%2Finfdis%2Fjiz674)
+Running the full analysis will take a significantly long time, even when done on high performance clusters. To overcome that, the processed data from running the model are already provided. The processed data is stored in the [data](data/) folder. First, download the Gabon data from the following link: https://data.mendeley.com/datasets/vtvmrzs9ch/2. Be sure to save it in the same `data` folder as above. Then, unzip the `model_processed_data.zip`, `model_processed_data.zip`, `analysis_processed_data.zip`, `analysis_processed_data_onchosim.zip`, and `analysis_processed_data_oti_100.zip` files in the `data/` folder. Once this has been completed, you can just run [analysis_for_gabon.Rmd](analysis_files/analysis_for_gabon.Rmd) to reproduce the plots for Gabon. To reproduce the plots for Togo, not additional downloads are necessary, just run [analysis_for_togo.Rmd](analysis_files/analysis_for_togo.Rmd). Note that while you are running the scripts, you may need to provide input (usually typing `1` in the console) to allow the script to create folders for the outputs.
 
-[Walker M, Hamley JID, Milton P, Monnot F, Pedrique B, Basáñez MG.
-Designing antifilarial drug trials using clinical trial simulators. Nat
-Commun. 2020 Jun
-1;11(1):2685.](https://doi.org/10.1038/s41467-020-16442-y)
+If you want to run the full analysis:
 
-[Hamley JID, Blok DJ, Walker M, Milton P, Hopkins AD, Hamill LC, Downs
-P, de Vlas SJ, Stolk WA, Basáñez MG. What does the COVID-19 pandemic
-mean for the next decade of onchocerciasis control and elimination?
-Trans R Soc Trop Med Hyg. 2021 Mar
-6;115(3):269-280.](https://doi.org/10.1093/trstmh/traa193)
+- Step 1: The code for the ABR tuning of Gabon is outlined in step 3.1 of the [Running EPIONCHO-IBM Ov16 vignette](vignettes/Running_EPIONCHO_IBM_Ov16.Rmd). Note that the default iterations per abr in the script is 1, however for the model, 100 was the minimum used, then with the narrowed down ABRs, 500 simulations were run.
 
-[Stolk WA, Blok DJ, Hamley JID, Cantey PT, de Vlas SJ, Walker M, Basáñez
-MG. Scaling-Down Mass Ivermectin Treatment for Onchocerciasis
-Elimination: Modeling the Impact of the Geographical Unit for Decision
-Making. Clin Infect Dis. 2021 Jun 14;72(Suppl
-3):S165-S171.](https://doi.org/10.1093/cid/ciab238)
+- Step 2: Once you have a "final" ABR and k<sub>E</sub>, you can then run the model itself for Gabon. The code for this is already prepared with the best fitting ABR and k<sub>E</sub> combination, available at [all_funcs_combined.R](all_funcs_combined.R). To replicate the results from the study, you need to run this 6000 times, each time providing a new iter value from 1-6000. You may need to create the `raw_data/gabon_output/` folder path. To run the same simulations with onchosim exposure, run [all_funcs_combined_onchosim.R](all_funcs_combined_onchosim.R) 6000 times as well, making sure to create the `raw_data/gabon_onchosim_output/` folder path.
 
-[Walker M, Hamley JID, Milton P, Monnot F, Kinrade S, Specht S, Pedrique
-B, Basáñez MG. Supporting Drug Development for Neglected Tropical
-Diseases Using Mathematical Modeling. Clin Infect Dis. 2021 Sep
-15;73(6):e1391-e1396. doi:
-10.1093/cid/ciab350.](https://doi.org/10.1093%2Fcid%2Fciab350)
+- Step 3: Cnce you have the data, you can run [processDataGabon.R](processDataGabon.R) to process the data in a format expected by the analysis code. You will need to run this script twice, once without any changes, and then another changing the input `files` argument to point to `raw_data/gabon_onchosim_output/`, along with changing the folder the data is saved in to `data/onchosim_data/`. Once you have the processed data, you can run [analysis_for_gabon.Rmd](analysis_files/analysis_for_gabon.Rmd) to produce the results for Gabon. To show the comparison between EPIONCHO-IBM exposure and onchosim exposure, please set `use_onchosim = FALSE` first, then re-run with `use_onchosim = TRUE`.
 
-## Installation
 
-You can install the development version of EPIONCHO.IBM from
-[GitHub](https://github.com/) with:
+- Step 4: To find the distribution of ABRs for togo, you can re-use much of the code is outlined in step 3.1 of the [Running EPIONCHO-IBM Ov16 vignette](vignettes/Running_EPIONCHO_IBM_Ov16.Rmd), with some minor changes. This will take quite a long time, and the previously determined ABR distributions are already implemented in the model code.
+Changes:
+Old Code -> New Code
+`num_iters_per_abr <- 1` -> `num_iters_per_abr <- 100`
+`abr_range_k3 <- seq(170, 179, 5)` -> `abr_range_k3 <- seq(1000, 60000, 500)`
+`all_abrs <- c(abrs_k2, abrs_k3)` -> `all_abrs <- abrs_k3`
+`kEs = c(rep(0.2, length(abrs_k2)), rep(0.3, length(abrs_k3)))` -> `kEs = rep(0.3, length(abrs_k3))`
+Additionally, change `test_output_folder/test_mfp_abr_output_folder/` to a path of your choosing.
 
-``` r
-# install.packages("devtools")
-# install.packages("remotes")
-remotes::install_github("mrc-ide/EPIONCHO.IBM")
-```
+Once all the simulations have been run, then 
 
-## Using EPIONCHO-IBM
+- Step 5: For the simulations for Togo, the model code to be run is in [all_funcs_combined_togo.R](all_funcs_combined_togo.R). This script needs to be run a total of 13,500 times, each time providing a new iter value from 1-13,500. You may need to create the `raw_data/togo_output/` folder path.
 
-For a detailed practical guide please see the [Installing and Running
-EPIONCHO-IBM](https://github.com/mrc-ide/EPIONCHO.IBM/blob/master/vignettes/Running_EPIONCHO_IBM.Rmd)
-vignette
+- Step 6: Then once you have the data, you can run [processDataTogo.R](processDataTogo.R) to process the data in a format expected by the analysis code. Once you have the processed data, you can run [analysis_for_togo.Rmd](analysis_files/analysis_for_togo.Rmd) to produce the results for Togo.

@@ -38,7 +38,6 @@ knitr::knit_hooks$set(timeit = local({
     }
   }})
 )
-simulateRDT=TRUE
 run_mfp = FALSE
 use_onchosim = TRUE
 
@@ -79,9 +78,6 @@ readGabonData <- function() {
   fileName <- "../../RVC/Improving Ov16/Ov16 Data/Skin_snip_and_Ov16_RDT_and_Ov16_ELISA_data_Gabon_2015.xlsx"
   sheets <- excel_sheets(fileName)
   data <- read_excel(fileName, sheet=sheets[1])
-  #data <- read.csv(fileName, check.names = FALSE)
-  #cols_to_keep <- c(2, 8, 9, 10, 14, 16, 17, 20, 21, 33, 34)
-  #data <- data[,cols_to_keep]
   data <- data %>% mutate(
     ov16_seropos = case_when(
       get("Ov16 result") == 1 ~ 1,
@@ -232,29 +228,8 @@ processActualGabonData <- function(data, justRDT=TRUE, useSex=TRUE) {
 print("Multicountry RDT Data")
 gabon_multiple_country_rdt <- readGabonData()
 print("")
-print("Gabon ELISA+RDT Data")
-gabon_rdt_elisa <- readGabonDataRDTElisa()
-print("")
-print("Gabon RDT Village Data")
-gabon_village_data <- readGabonMultiCountryVillageGroupedData()
 
-if(simulateRDT) {
-  summarize_gabon_multicountry_data_sex <- processActualGabonData(gabon_multiple_country_rdt$data)
-
-  summarize_gabon_multicountry_data <- processActualGabonData(gabon_multiple_country_rdt$data, useSex = FALSE)
-}
-
-summarized_gabon_rdt_elisa <- processActualGabonData(gabon_rdt_elisa, justRDT=FALSE)
-
-
-TP = sum(gabon_rdt_elisa$mf_status == 1 & gabon_rdt_elisa$ov16_status_elisa == 1)
-TN = sum(gabon_rdt_elisa$mf_status == 0 & gabon_rdt_elisa$ov16_status_elisa == 0)
-FN = sum(gabon_rdt_elisa$mf_status == 1 & gabon_rdt_elisa$ov16_status_elisa == 0)
-FP = sum(gabon_rdt_elisa$mf_status == 0 & gabon_rdt_elisa$ov16_status_elisa == 1)
-
-print(paste("ELISA: Sens:", TP / (TP + FN)))
-print(paste("Spec:", TN / (TN + FP)))
-
+summarize_gabon_multicountry_data <- processActualGabonData(gabon_multiple_country_rdt$data, useSex = FALSE)
 
 TP <- sum(gabon_multiple_country_rdt$data$mf_pos == 1 & gabon_multiple_country_rdt$data$ov16_seropos == 1)
 TN <- sum(gabon_multiple_country_rdt$data$mf_pos == 0 & gabon_multiple_country_rdt$data$ov16_seropos == 0)
@@ -294,27 +269,26 @@ spec <- c(94.8, 94, 98.9, 99.9) / 100
 beta_params_sens <- fit_to_beta(sens)
 sens_scale <- (max(hist(sens, plot=FALSE, breaks = seq(0, 1, by = 0.025))$counts) / max(beta_params_sens[[1]]))
 sens_plot <- ggplot() +
-  geom_histogram(aes(x=sens * 100, color="Count from Literature"), fill="white",  binwidth = 2.5, boundary=0) +
-  geom_line(aes(x=seq(0, 100, 0.01), y=beta_params_sens[[1]] * sens_scale, color="Beta Density")) +
+  # geom_histogram(aes(x=sens * 100, color="Count from Literature"), fill="white",  binwidth = 2.5, boundary=0) +
+  geom_histogram(aes(x=sens, y=..density.., color="Count from\nliterature"), fill="white", binwidth = 0.025, boundary=0) +
+  # geom_line(aes(x=seq(0, 100, 0.01), y=beta_params_sens[[1]] * sens_scale, color="Beta Density")) +
+  geom_line(aes(x=seq(0, 1, 0.0001), y=beta_params_sens[[1]], color="Beta Density\nFit to Data")) +
   theme_bw() +
-  scale_y_continuous(
-    "Count",
-    breaks=seq(0, 2, 1),
-    sec.axis = sec_axis(
-      ~ . / sens_scale,
-      breaks = c(
-        seq(0, max(beta_params_sens[[1]]), 10),
-        floor(max(beta_params_sens[[1]]))
-      ),
-      name = "Beta Density"
-    )
-  ) +
-  scale_x_continuous("Sensitivity (%)", breaks=seq(0, 100, 5), limits=c(20, 70)) +
-  scale_color_manual("", values=c("Count from Literature"="black", "Beta Density Fit"="red", "Beta Density"="darkgreen")) +
-  # ggtitle(bquote(
-  #   alpha: ~ .(round(beta_params_sens[[2]], 2)) ~ 
-  #   beta: ~ .(round(beta_params_sens[[3]], 2))
-  # )) +
+  ylab("Density") +
+  # scale_y_continuous(
+  #   "Count",
+  #   breaks=seq(0, 2, 1),
+  #   sec.axis = sec_axis(
+  #     ~ . / sens_scale,
+  #     breaks = c(
+  #       seq(0, max(beta_params_sens[[1]]), 10),
+  #       floor(max(beta_params_sens[[1]]))
+  #     ),
+  #     name = "Beta Density"
+  #   )
+  # ) +
+  scale_x_continuous("Sensitivity (%)", breaks=seq(0, 1.00, 0.05), labels=seq(0, 100, 5), limits=c(0.20, 0.70)) +
+  scale_color_manual("", values=c("sensitivity data count"="black", "Count from\nliterature"="black", "Beta Density\nFit to Data"="darkgreen", "Beta Density Fit"="red", "Beta Density using data"="darkgreen")) +
   theme(
     panel.grid.minor = element_blank()
   )
@@ -323,33 +297,32 @@ sens_plot
 beta_params_spec <- fit_to_beta(spec)
 spec_scale <- (max(hist(spec, plot = FALSE)$counts) / max(beta_params_spec[[1]]))
 spec_plot <- ggplot() +
-  geom_histogram(aes(x=spec*100, color="Count from Literature"), fill="white", binwidth = 1, boundary=0) +
-  geom_line(
-    aes(
-      x=seq(0, 100, 0.01), 
-      y=beta_params_spec[[1]] * spec_scale,
-      color="Beta Density"
-    )
-  ) +
+  # geom_histogram(aes(x=spec*100, color="Count from Literature"), fill="white", binwidth = 1, boundary=0) +
+  geom_histogram(aes(x=spec, y=..density.., color="Count from\nliterature"), fill="white", binwidth = 0.01, boundary=0) +
+  # geom_line(
+  #   aes(
+  #     x=seq(0, 100, 0.01), 
+  #     y=beta_params_spec[[1]] * spec_scale,
+  #     color="Beta Density"
+  #   )
+  # ) +
+  geom_line(aes(x=seq(0, 1, 0.0001), y=beta_params_spec[[1]], color="Beta Density\nFit to Data")) +
   theme_bw() +
-  scale_y_continuous(
-    "Count",
-    breaks=seq(0, 2, 1),
-    sec.axis = sec_axis(
-      ~ . / spec_scale,
-      breaks = c(
-        seq(0, max(beta_params_spec[[1]]), 10),
-        floor(max(beta_params_spec[[1]]))
-      ),
-      name = "Beta Density"
-    )
-  ) +
-  scale_x_continuous("Specificity (%)", breaks=seq(50, 100, 5), limits=c(90, 100)) +
-  scale_color_manual("", values=c("Count from Literature"="black", "Beta Density Fit"="red", "Beta Density"="darkgreen")) +
-  # ggtitle(bquote(
-  #   alpha: ~ .(round(beta_params_spec[[2]], 2)) ~ 
-  #   beta: ~ .(round(beta_params_spec[[3]], 2))
-  # )) +
+  ylab("Density") +
+  # scale_y_continuous(
+  #   "Count",
+  #   breaks=seq(0, 2, 1),
+  #   sec.axis = sec_axis(
+  #     ~ . / spec_scale,
+  #     breaks = c(
+  #       seq(0, max(beta_params_spec[[1]]), 10),
+  #       floor(max(beta_params_spec[[1]]))
+  #     ),
+  #     name = "Beta Density"
+  #   )
+  # ) +
+  scale_x_continuous("Specificity (%)", breaks=seq(0.50, 1.00, 0.05), labels=seq(50, 100, 5), limits=c(0.90, 1.00)) +
+  scale_color_manual("", values=c("sensitivity data count"="black", "Count from\nliterature"="black", "Beta Density\nFit to Data"="darkgreen", "Beta Density Fit"="red", "Beta Density using data"="darkgreen")) +
   theme(
     panel.grid.minor = element_blank()
   )
@@ -358,7 +331,7 @@ spec_plot
 sens_spec_plot <- (sens_plot | spec_plot) + 
   plot_layout(guides = "collect") & theme(legend.position = "bottom")
 sens_spec_plot
-ggsave(paste0("images/images_", output_version,"/gabon_sens_spec_dists.svg"), sens_spec_plot, width=6000, height=3600, units="px", dpi=600)
+ggsave(paste0("images/images_", output_version,"/gabon_sens_spec_dists_upd.svg"), sens_spec_plot, width=6000, height=3600, units="px", dpi=600)
 
 pull_from_beta <- function(params, n=1) {
   return(
@@ -783,16 +756,9 @@ if(run_mfp) {
     geom_text_repel(aes(x=ABR, y=mf_prev, color=within_bounds, label=ABR), hjust = 4, data=mean_weighted_mfp_data %>% filter(within_bounds), show.legend=FALSE) +
     facet_grid(exposure ~ Ke, scales = "free_x") +
     ylab("Mean microfilarial prevalence (%) at equilibrium") +
-    #scale_x_continuous("ABR", sec_axis(~ . , name = expression("k"["E"]), breaks = NULL, labels = NULL)) +
-    # labs(
-    #   title = expression("Individual exposure heterogeneity " * italic(k)[italic(E)]),
-    #   x = "Annual biting rate"
-    # ) +
     scale_color_manual("Observed microfilarial prevalence 95% Confidence Interval", values=c("FALSE"="black", "TRUE"="red")) +
     scale_x_continuous("Annual biting rate", breaks=seq(50, 200, 25)) +
     geom_ribbon(aes(x=ABR, ymin=lb, ymax=ub), alpha=0.2, fill="red") +
-    #geom_hline(yintercept = 4.81, color="red", alpha=0.5) + 
-    #geom_hline(yintercept = 6.57, color="red", alpha=0.5) +
     theme_bw() +
     theme(
       plot.title = element_text(size=10, hjust = 0.5, face="bold.italic"),
@@ -1075,7 +1041,6 @@ if (use_onchosim) {
   )
 }
 
-# create_mfp_graph(summarize_gabon_multicountry_data, base_k3_list[[1]], "k3")
 create_mfp_graph(
   summarize_gabon_multicountry_data,
   mfp_graph_df,
@@ -1096,133 +1061,9 @@ custom_calc_resid_mfp(summarize_gabon_multicountry_data, summarizeSimulatedGabon
 
 ### Calc Residuals
 ```{r}
-use_old_residuals = FALSE
-if (use_old_residuals) {
-  filterHypothesesOv16Residuals <- function(data, combineHyp=TRUE, merge_data=TRUE) {
-    actual_hyps <- c("Any worm", "L3 exposure", "L4-L5 moult", "Mating worm pair with any mf")
-    data <- data %>% filter(Hypothesis %in% actual_hyps)
-    if(combineHyp) {
-      data <- data %>% mutate(
-        Hypothesis = ifelse(Hypothesis == "Mating worm pair with any mf", "H4", "H1-3")
-        )
-    } else {
-      data <- data %>% mutate(
-        Hypothesis = case_when(
-          Hypothesis == "Any worm" ~ "H3",
-          Hypothesis == "L3 exposure" ~ "H1",
-          Hypothesis == "L4-L5 moult" ~ "H2",
-          Hypothesis == "Mating worm pair with any mf" ~ "H4"
-        ),
-        Hypothesis = factor(Hypothesis, levels=c("H1", "H2", "H3", "H4"))
-      )
-    }
-    if (combineHyp || merge_data) {
-      data <- data %>% 
-        group_by(age_groups, Hypothesis) %>% 
-        summarise(across(where(is.numeric), mean), .groups="drop")
-    }
-    return(data)
-  }
-  calcResiduals <- function(originalData, projection_data, desc, combineHyp=TRUE, merge_data=TRUE) {
-    lsr_calculation_data <- merge(projection_data %>% filterHypothesesOv16Residuals(combineHyp = combineHyp, merge_data = merge_data), originalData, by=c("age_groups")) 
-    lsr_calculation <- lsr_calculation_data %>%
-      mutate(
-        mse_value = (
-          ((ov16_prev*100) - (ov16_prev_rdt*100))**2 *
-            n / total_pop
-          )) %>%
-      select(Hypothesis, age_groups, mse_value) %>%
-      mutate(Descriptor = desc)
-    if(merge_data) {
-      return(lsr_calculation %>% 
-               group_by(Hypothesis, Descriptor) %>%
-               summarise(mse=sum(mse_value), .groups="drop")
-      )
-    }
-    
-    return(lsr_calculation)
-  }
-  
-  residual_results <- rbind(
-    calcResiduals(summarize_gabon_multicountry_data, simulation_summary_rdt_100_mount, "100% Antibody Response"),
-    calcResiduals(summarize_gabon_multicountry_data, simulation_summary_rdt_sero_trigger, "Seroreversion on Trigger"),
-    calcResiduals(summarize_gabon_multicountry_data, simulation_summary_rdt_sero_no_inf, "Seroreversion on No Infection")
-  )
-  residual_results$mse <- round(as.numeric(residual_results$mse), 1)
-  residual_results$sens_spec <- "1.00_1.00"
-  for (rdt_sens_spec_vec in rdt_sens_spec_vec_list) {
-    sens_spec_val <- paste(rdt_sens_spec_vec, collapse="_")
-    new_results <- rbind(
-      calcResiduals(summarize_gabon_multicountry_data, base_k2_list[[sens_spec_val]], "100% Antibody Response"),
-      calcResiduals(summarize_gabon_multicountry_data, sero_trigger_k2_list[[sens_spec_val]], "Seroreversion on Trigger"),
-      calcResiduals(summarize_gabon_multicountry_data, sero_no_inf_k2_list[[sens_spec_val]], "Seroreversion on No Infection"))
-    new_results$mse <- round(as.numeric(new_results$mse), 1)
-    new_results$sens_spec <- sens_spec_val
-    residual_results <- rbind(residual_results, new_results)
-  }
-  
-  
-  residual_results %>% pivot_wider(id_cols=c(sens_spec, Hypothesis), names_from=c(Descriptor), values_from=c(mse)) %>% group_by(sens_spec) %>% mutate(
-      across(2:4, ~ ifelse(. == min(.), text_spec(., bold=TRUE), .))
-    ) %>% ungroup() %>% kable('html', escape=FALSE) %>% kable_classic() %>% print()
-  
-  # ---
-  
-  residual_results_all <- rbind(
-    calcResiduals(summarize_gabon_multicountry_data, simulation_summary_rdt_100_mount, "100% Antibody Response", combineHyp = FALSE),
-    calcResiduals(summarize_gabon_multicountry_data, simulation_summary_rdt_sero_trigger, "Seroreversion on Trigger", combineHyp = FALSE),
-    calcResiduals(summarize_gabon_multicountry_data, simulation_summary_rdt_sero_no_inf, "Seroreversion on No Infection", combineHyp = FALSE)
-  )
-  residual_results_all$mse <- round(as.numeric(residual_results_all$mse), 1)
-  residual_results_all$sens_spec <- "1.00_1.00"
-  for (rdt_sens_spec_vec in rdt_sens_spec_vec_list) {
-    sens_spec_val <- paste(rdt_sens_spec_vec, collapse="_")
-    new_results <- rbind(
-      calcResiduals(summarize_gabon_multicountry_data, base_k2_list[[sens_spec_val]], "100% Antibody Response", combineHyp = FALSE),
-      calcResiduals(summarize_gabon_multicountry_data, sero_trigger_k2_list[[sens_spec_val]], "Seroreversion on Trigger", combineHyp = FALSE),
-      calcResiduals(summarize_gabon_multicountry_data, sero_no_inf_k2_list[[sens_spec_val]], "Seroreversion on No Infection", combineHyp = FALSE))
-    new_results$mse <- round(as.numeric(new_results$mse), 1)
-    new_results$sens_spec <- sens_spec_val
-    residual_results_all <- rbind(residual_results_all, new_results)
-  }
-  
-  
-  residual_results_all %>% pivot_wider(id_cols=c(sens_spec, Hypothesis), names_from=c(Descriptor), values_from=c(mse)) %>% group_by(sens_spec) %>% mutate(
-      across(2:4, ~ ifelse(. == min(.), text_spec(., bold=TRUE), .))
-    ) %>% ungroup() %>% kable('html', escape=FALSE) %>% kable_classic() %>% print()
-  
-  # ---
-  
-  residual_results <- rbind(
-    calcResiduals(summarize_gabon_multicountry_data, simulation_summary_rdt_100_mount_k3, "100% Antibody Response", combineHyp = FALSE),
-    calcResiduals(summarize_gabon_multicountry_data, simulation_summary_rdt_sero_trigger_k3, "Seroreversion on Trigger", combineHyp = FALSE),
-    calcResiduals(summarize_gabon_multicountry_data, simulation_summary_rdt_sero_no_inf_k3, "Seroreversion on No Infection", combineHyp = FALSE)
-  )
-  residual_results$mse <- round(as.numeric(residual_results$mse), 1)
-  residual_results$sens_spec <- "1.00_1.00"
-  for (rdt_sens_spec_vec in rdt_sens_spec_vec_list) {
-    sens_spec_val <- paste(rdt_sens_spec_vec, collapse="_")
-    new_results <- rbind(
-      calcResiduals(summarize_gabon_multicountry_data, base_k3_list[[sens_spec_val]], "100% Antibody Response", combineHyp = FALSE),
-      calcResiduals(summarize_gabon_multicountry_data, sero_trigger_k3_list[[sens_spec_val]], "Seroreversion on Trigger", combineHyp = FALSE),
-      calcResiduals(summarize_gabon_multicountry_data, sero_no_inf_k3_list[[sens_spec_val]], "Seroreversion on No Infection", combineHyp = FALSE))
-    new_results$mse <- round(as.numeric(new_results$mse), 1)
-    new_results$sens_spec <- sens_spec_val
-    residual_results <- rbind(residual_results, new_results)
-  }
-  
-  
-  
-  
-  
-  residual_results %>% pivot_wider(id_cols=c(sens_spec, Hypothesis), names_from=c(Descriptor), values_from=c(mse)) %>% group_by(sens_spec) %>% mutate(
-      across(2:4, ~ ifelse(. == min(.), text_spec(., bold=TRUE), .))
-    ) %>% ungroup() %>% kable('html', escape=FALSE) %>% kable_classic() %>% print()
-}
-
 calc_resids <- function(base, no_inf, trigger, kE, sens_spec_list, age_limit=Inf) {
   resids = c()
-  for(sens_spec in sens_spec_list) { # rdt_sens_spec_vec_list
+  for(sens_spec in sens_spec_list) {
     print(sens_spec)
     new_result <- NA
     if (all(sens_spec == c(-1, -1))) {
@@ -1283,8 +1124,6 @@ process_resids <- function(resids, display_cis, return_raw_resids=FALSE) {
       sample_mean = mean(mse),
       sample_varience = var(mse),
       se = sqrt(sample_varience / n_distinct(run_num)),
-      # lower_bound = quantile(mse, 0.025),
-      # upper_bound = quantile(mse, 0.975),
       lower_bound = sample_mean - 1.96 * se,
       upper_bound = sample_mean + 1.96 * se,
       .groups="drop"
@@ -1311,15 +1150,6 @@ process_resids <- function(resids, display_cis, return_raw_resids=FALSE) {
     final_resids %>% 
       dplyr::select(Descriptor, Hypothesis, spec, sens, output_val) %>%
       pivot_wider(id_cols=c(spec, sens, Hypothesis), names_from=c(Descriptor), values_from=c(output_val)) %>% group_by(spec, sens) %>% 
-      # mutate(
-      #   across(2:4, ~ {
-      #     first_num <- as.numeric(str_extract(., "^\\d+\\.\\d+"))
-      #     min_val <- min(unlist(across(2:4, ~ as.numeric(str_extract(., "^\\d+\\.\\d+")))), na.rm = TRUE)
-      #     ifelse(grepl(min_val, .),
-      #            text_spec(., bold=TRUE), 
-      #            .)
-      #   })
-      # ) %>% 
       ungroup() %>% 
       arrange(desc(spec), sens, Hypothesis))
 }
@@ -1344,7 +1174,6 @@ k2_with_ci %>% write.csv(paste0("images/images_", output_version, "/k2_mses_with
 
 if (use_onchosim) {
   normalized_mse_plot <- process_resids(
-    # resids_k2 %>% mutate(Descriptor = paste0("ONCHOSIM", Descriptor)),
     rbind(
       resids_k2 %>% mutate(Descriptor = paste0("ONCHOSIM", Descriptor)),
       readRDS(paste0("images/images_", sub("_onchosim", "", version_to_use), "/resids_k2_df.rds")) %>% mutate(Descriptor = paste0("EPIONCHO", Descriptor))
@@ -1411,7 +1240,6 @@ if (use_onchosim) {
     size=2.5
   ) +
   scale_color_identity() +
-  # scale_fill_viridis_c("Normalized MSE", option = "rocket", breaks=seq(0, 1, 0.5)) + 
   scale_fill_gradientn(
     "Normalized MSE",
     colours = c("black", "grey20", "grey50", "grey70", "white"),# "#f58a1f"),
@@ -1439,32 +1267,12 @@ if (use_onchosim) {
     )
 }
 
-
-# resids_k2_under_20 <- calc_resids(summarizeSimulatedGabon_rdt_100_mount, summarizeSimulatedGabon_rdt_sero_no_inf, summarizeSimulatedGabon_rdt_sero_trigger, "0.2", sens_spec_list=rdt_sens_spec_vec_list_2, age_limit = 20)
-# k2_with_ci_under_20 <- process_resids(resids_k2_under_20, TRUE)
-# k2_with_ci_under_20 %>% kable('html', escape=FALSE) %>% kable_classic() %>% print()
-# k2_with_ci_under_20 %>% write.csv(paste0("images/images_", output_version, "/k2_mses_with_ci_under_20.csv"), row.names=FALSE)
-
-
 if ("resids_k3_df.rds" %in% list.files(paste0("images/images_", version_to_use, "/"))) {
   resids_k3 <- readRDS(paste0("images/images_", version_to_use, "/resids_k2_df.rds"))
 } else {
   resids_k3 <- calc_resids(summarizeSimulatedGabon_rdt_100_mount_k3, summarizeSimulatedGabon_rdt_sero_no_inf_k3, summarizeSimulatedGabon_rdt_sero_trigger_k3, "0.3", sens_spec_list=rdt_sens_spec_vec_list_2)
   resids_k3 %>% saveRDS(paste0("images/images_", output_version, "/resids_k3_df.rds"))
 }
-
-k3_without_ci <- process_resids(resids_k3, FALSE)
-k3_without_ci %>% kable('html', escape=FALSE) %>% kable_classic() %>% print()
-k3_without_ci %>% write.csv(paste0("images/images_", output_version, "/k3_mses_without_ci.csv"), row.names=FALSE)
-
-k3_with_ci <- process_resids(resids_k3, TRUE)
-k3_with_ci %>% kable('html', escape=FALSE) %>% kable_classic() %>% print()
-k3_with_ci %>% write.csv(paste0("images/images_", output_version, "/k3_mses_with_ci.csv"), row.names=FALSE)
-
-# resids_k3_under_20 <- calc_resids(summarizeSimulatedGabon_rdt_100_mount_k3, summarizeSimulatedGabon_rdt_sero_no_inf_k3, summarizeSimulatedGabon_rdt_sero_trigger_k3, "0.3", sens_spec_list=rdt_sens_spec_vec_list_2, age_limit = 20)
-# resids_k3_under_20 <- process_resids(resids_k2_under_20, TRUE)
-# resids_k3_under_20 %>% kable('html', escape=FALSE) %>% kable_classic() %>% print()
-# resids_k3_under_20 %>% write.csv(paste0("images/images_", output_version, "/k3_mses_with_ci_under_20.csv"), row.names=FALSE)
 ```
 
 
@@ -1557,238 +1365,7 @@ if (use_onchosim) {
 all_sero_hyp = rbind(df2, df3, df4) %>%
   mutate(label_val = paste(Hypothesis, sens_spec, sep=" | "))
 
-plot <-  ggplot() + geom_point(aes(x=age_groups, y=ov16_prev_rdt*100), alpha=0.5, color="black", size=0.5, data=df1 %>% filter(age_groups > 0)) +
-    geom_errorbar(aes(x=age_groups, ymin=(ov16_wilson_lb*100), ymax=(ov16_wilson_ub*100)), width=2.5, alpha=0.5, colour="black", data=df1 %>% filter(age_groups > 0)) +
-   geom_line(aes(x=age_groups, y=ov16_prev*100, color=Hypothesis), linewidth=0.6, data=all_sero_hyp %>% #, linetype=sens_spec
-               filter(
-                 (Hypothesis == "H4i" & sens == "40%" & spec == "99%") |
-                   (Hypothesis == "H4iii" & sens == "50%" & spec == "99%") |
-                   (Hypothesis == "H1iii-3iii" & sens == "40%" & spec == "99%") |
-                   (Hypothesis == "H3ii" & sens == "40%" & spec == "99%")
-                 )
-             ) +
-    geom_ribbon(aes(x=age_groups, ymin=ov16_lower*100, ymax=ov16_upper*100, fill=Hypothesis), color=NA, alpha=0.1, data=all_sero_hyp %>%
-               filter(
-                 (Hypothesis == "H4i" & sens == "40%" & spec == "99%") |
-                   (Hypothesis == "H4iii" & sens == "50%" & spec == "99%") |
-                   (Hypothesis == "H1iii-3iii" & sens == "40%" & spec == "99%") |
-                   (Hypothesis == "H3ii" & sens == "40%" & spec == "99%")
-                 )) +
-  scale_color_manual(name="Hypotheses", values=color_vals) +
-  scale_fill_manual(name="Hypotheses", values=color_vals) +
-  # geom_label_repel(direction = "x", nudge_x = 1.5, nudge_y = 1, aes(x=age_groups, y=ov16_prev*100, label=label_val), data = all_sero_hyp %>%
-  #              filter(
-  #                (age_groups > 75) &
-  #                (
-  #                  (Hypothesis == "H4i" & sens == "40%" & spec == "99%") |
-  #                  (Hypothesis == "H4iii" & sens == "50%" & spec == "99%") |
-  #                  (Hypothesis == "H1iii-3iii" & sens == "40%" & spec == "99%") |
-  #                  (Hypothesis == "H3ii" & sens == "40%" & spec == "99%")
-  #                )
-  #              )
-  #            ) +
-  theme_bw() +
-  xlab("Age (years)") +
-  ylab("Anti-Ov16 seroprevalence (%)") +
-  guides(alpha="none", linetype="none", color=guide_legend(nrow=1)) +
-  theme(
-    legend.position = "bottom",
-    legend.direction = "horizontal",
-    plot.title = element_text(size=10, hjust = 0.5),
-    axis.title.y = element_text(size=10),
-    title = element_text(size=10),
-    legend.text = element_text(size=6),
-    legend.title = element_text(size=8),
-    legend.key.size = unit(0.8, 'lines'),
-    axis.text.y = element_text(size=6),
-    axis.text.x = element_text(size=6),
-    strip.placement = "outside",
-    panel.grid.minor = element_blank(),
-    axis.line.x = element_line(color = "black"),
-    axis.line.y = element_line(color = "black"),
-    strip.text.y = element_text(angle=0),
-    axis.line.y.right = element_blank()
-  )
-plot
-
-ggsave(paste0("images/images_", output_version,"/best_4_fitting_hyps_gabon_rdt.svg"), plot, width=4250, height=3000, units="px", dpi=450)
-
-plot_2 <-  ggplot() + geom_point(aes(x=age_groups, y=ov16_prev_rdt*100), alpha=0.5, color="black", size=0.5, data=df1 %>% filter(age_groups > 0)) +
-    geom_errorbar(aes(x=age_groups, ymin=(ov16_wilson_lb*100), ymax=(ov16_wilson_ub*100)), width=2.5, alpha=0.5, colour="black", data=df1 %>% filter(age_groups > 0)) +
-   geom_line(aes(x=age_groups, y=ov16_prev*100, color=Hypothesis, linetype=sens_spec), linewidth=0.6, data=all_sero_hyp %>%
-               filter(
-                 (Hypothesis == "H4i" & sens == "40%" & spec == "99%") |
-                   (Hypothesis == "H4iii" & sens == "50%" & spec == "99%")
-                 )
-             ) +
-    geom_ribbon(aes(x=age_groups, ymin=ov16_lower*100, ymax=ov16_upper*100, fill=Hypothesis), color=NA, alpha=0.1, data=all_sero_hyp %>%
-               filter(
-                 (Hypothesis == "H4i" & sens == "40%" & spec == "99%") |
-                   (Hypothesis == "H4iii" & sens == "50%" & spec == "99%")
-                 )) +
-  geom_label_repel(size=3, direction = "x", nudge_x = 2, nudge_y = -1.1, aes(x=age_groups, y=ov16_prev*100, label=label_val), data = all_sero_hyp %>%
-               filter(
-                 (age_groups > 75) &
-                 (
-                   (Hypothesis == "H4i" & sens == "40%" & spec == "99%") |
-                   (Hypothesis == "H4iii" & sens == "50%" & spec == "99%")
-                 )
-               )
-             ) +
-  scale_color_manual(name="Hypotheses", values=color_vals) +
-  scale_fill_manual(name="Hypotheses", values=color_vals) +
-  scale_linetype_manual("", values=c("50%, 99%"="dashed", "40%, 99%"="dotted")) +
-  theme_bw() +
-  xlab("Age (years)") +
-  ylab("Anti-Ov16 seroprevalence (%)") +
-  guides(alpha="none", linetype="none", color=guide_legend(nrow=1)) +
-  theme(
-    legend.position = "bottom",
-    legend.direction = "horizontal",
-    plot.title = element_text(size=10, hjust = 0.5),
-    axis.title.y = element_text(size=10),
-    title = element_text(size=10),
-    legend.text = element_text(size=6),
-    legend.title = element_text(size=8),
-    legend.key.size = unit(0.8, 'lines'),
-    axis.text.y = element_text(size=6),
-    axis.text.x = element_text(size=6),
-    strip.placement = "outside",
-    panel.grid.minor = element_blank(),
-    axis.line.x = element_line(color = "black"),
-    axis.line.y = element_line(color = "black"),
-    strip.text.y = element_text(angle=0),
-    axis.line.y.right = element_blank()
-  )
-plot_2
-
-ggsave(paste0("images/images_", output_version,"/best_2_fitting_hyps_gabon_rdt.svg"), plot_2, width=4250, height=3000, units="px", dpi=450)
-
-
-plot_3_all_sero_hyp <- all_sero_hyp %>%
-  filter(
-    ((sens == "40%" & spec == "99%")) |
-     ((sens == "50%" & spec == "99%") & grepl("iii", Hypothesis))
-  ) %>%
-  mutate(
-    sero_hyp = case_when(
-      grepl("iii", Hypothesis) ~ "iii",
-      grepl("ii", Hypothesis) ~ "ii",
-      TRUE ~ "i"
-    ),
-    show_ribbon = case_when(
-      sens == "40%" & spec == "99%" & Hypothesis == "H4i" ~ TRUE,
-      sens == "40%" & spec == "99%" & Hypothesis == "H3ii" ~ TRUE,
-      sens == "40%" & spec == "99%" & Hypothesis == "H1iii-3iii" ~ TRUE,
-      sens == "50%" & spec == "99%" & Hypothesis == "H4iii" ~ TRUE,
-      TRUE ~ FALSE
-    ),
-    alpha_val = case_when(
-      sens == "40%" & spec == "99%" & Hypothesis == "H4i" ~ 1,
-      sens == "40%" & spec == "99%" & Hypothesis == "H3ii" ~ 1,
-      sens == "40%" & spec == "99%" & Hypothesis == "H1iii-3iii" ~ 1,
-      sens == "50%" & spec == "99%" & Hypothesis == "H4iii" ~ 1,
-      TRUE ~ 0.3
-    )
-  )
-
-plot_3 <- ggplot() + geom_point(aes(x=age_groups, y=ov16_prev_rdt*100), alpha=0.5, color="black", size=0.5, data=df1 %>% filter(age_groups > 0)) +
-    geom_errorbar(aes(x=age_groups, ymin=(ov16_wilson_lb*100), ymax=(ov16_wilson_ub*100)), width=2.5, alpha=0.5, colour="black", data=df1 %>% filter(age_groups > 0)) +
-   geom_line(aes(x=age_groups, y=ov16_prev*100, color=Hypothesis, alpha=alpha_val), linewidth=0.6, data=plot_3_all_sero_hyp) +
-    geom_ribbon(aes(x=age_groups, ymin=ov16_lower*100, ymax=ov16_upper*100, fill=Hypothesis), color=NA, alpha=0.1, data=plot_3_all_sero_hyp %>% filter(show_ribbon == TRUE)) +
-  scale_color_manual(name="Hypotheses", values=color_vals) +
-  scale_fill_manual(name="Hypotheses", values=color_vals) +
-  scale_alpha_continuous(range = c(0.3, 1)) +
-  theme_bw() +
-  facet_wrap(sero_hyp~sens_spec) +
-  xlab("Age (years)") +
-  ylab("Anti-Ov16 seroprevalence (%)") +
-  guides(alpha="none", linetype="none", color=guide_legend(nrow=1)) +
-  theme(
-    legend.position = "bottom",
-    legend.direction = "horizontal",
-    plot.title = element_text(size=10, hjust = 0.5),
-    axis.title.y = element_text(size=10),
-    title = element_text(size=10),
-    legend.text = element_text(size=6),
-    legend.title = element_text(size=8),
-    legend.key.size = unit(0.8, 'lines'),
-    axis.text.y = element_text(size=6),
-    axis.text.x = element_text(size=6),
-    strip.placement = "outside",
-    panel.grid.minor = element_blank(),
-    axis.line.x = element_line(color = "black"),
-    axis.line.y = element_line(color = "black"),
-    strip.text.y = element_text(angle=0),
-    axis.line.y.right = element_blank()
-  )
-plot_3
-
-ggsave(paste0("images/images_", output_version,"/best_4_fitting_hyps_gabon_rdt_with_comparisons.svg"), plot_3, width=4250, height=3000, units="px", dpi=450)
-
-plot_4_all_sero_hyp <- all_sero_hyp %>%
-  filter(
-    ((sens == "40%" & spec == "99%") & Hypothesis %in% c("H4i")) |#, "H1i-3i")) |
-     ((sens == "50%" & spec == "99%") & grepl("H4iii", Hypothesis))
-  ) %>%
-  mutate(
-    sero_hyp = case_when(
-      grepl("iii", Hypothesis) ~ "H4iii",
-      grepl("ii", Hypothesis) ~ "H4ii",
-      TRUE ~ "H4i"
-    ),
-    show_ribbon = case_when(
-      sens == "40%" & spec == "99%" & Hypothesis == "H4i" ~ TRUE,
-      sens == "40%" & spec == "99%" & Hypothesis == "H3ii" ~ TRUE,
-      sens == "40%" & spec == "99%" & Hypothesis == "H1iii-3iii" ~ TRUE,
-      sens == "50%" & spec == "99%" & Hypothesis == "H4iii" ~ TRUE,
-      TRUE ~ FALSE
-    ),
-    alpha_val = case_when(
-      sens == "40%" & spec == "99%" & Hypothesis == "H4i" ~ 1,
-      sens == "40%" & spec == "99%" & Hypothesis == "H3ii" ~ 1,
-      sens == "40%" & spec == "99%" & Hypothesis == "H1iii-3iii" ~ 1,
-      sens == "50%" & spec == "99%" & Hypothesis == "H4iii" ~ 1,
-      TRUE ~ 0.3
-    )
-  )
-
-plot_4 <- ggplot() + geom_point(aes(x=age_groups, y=ov16_prev_rdt*100), alpha=0.5, color="black", size=0.5, data=df1 %>% filter(age_groups > 0)) +
-    geom_errorbar(aes(x=age_groups, ymin=(ov16_wilson_lb*100), ymax=(ov16_wilson_ub*100)), width=2.5, alpha=0.5, colour="black", data=df1 %>% filter(age_groups > 0)) +
-   geom_line(aes(x=age_groups, y=ov16_prev*100, color=Hypothesis, alpha=alpha_val), linewidth=0.6, data=plot_4_all_sero_hyp) +
-    geom_ribbon(aes(x=age_groups, ymin=ov16_lower*100, ymax=ov16_upper*100, fill=Hypothesis), color=NA, alpha=0.1, data=plot_4_all_sero_hyp %>% filter(show_ribbon == TRUE)) +
-  scale_color_manual(name="Hypotheses", values=c("black", "black")) +
-  scale_fill_manual(name="Hypotheses", values=c("black", "black")) +
-  scale_alpha_continuous(range = c(0.3, 1)) +
-  theme_bw() +
-  facet_wrap(sero_hyp~sens_spec) +
-  xlab("Age (years)") +
-  ylab("Anti-Ov16 seroprevalence (%)") +
-  guides(alpha="none", linetype="none", color="none", fill="none") + #guide_legend(nrow=1)) +
-  theme(
-    legend.position = "bottom",
-    legend.direction = "horizontal",
-    plot.title = element_text(size=10, hjust = 0.5),
-    axis.title.y = element_text(size=10),
-    title = element_text(size=10),
-    legend.text = element_text(size=6),
-    legend.title = element_text(size=8),
-    legend.key.size = unit(0.8, 'lines'),
-    axis.text.y = element_text(size=6),
-    axis.text.x = element_text(size=6),
-    strip.placement = "outside",
-    panel.grid.minor = element_blank(),
-    axis.line.x = element_line(color = "black"),
-    axis.line.y = element_line(color = "black"),
-    strip.text.y = element_text(angle=0),
-    axis.line.y.right = element_blank()
-  ) +
-  ggtitle("Sensitivity, Specificity")
-plot_4
-
-ggsave(paste0("images/images_", output_version,"/best_2_fitting_hyps_gabon_rdt_without_comparisons.svg"), plot_4, width=4250, height=3000, units="px", dpi=600)
-
-plot_5_best_hyp <- all_sero_hyp %>%
+plot_best_hyp <- all_sero_hyp %>%
   filter(
     ((sens == "49%") & spec == "97%")
   ) %>%
@@ -1812,10 +1389,10 @@ plot_5_best_hyp <- all_sero_hyp %>%
     )
   )
 
-plot_5 <- ggplot() + geom_point(aes(x=age_groups, y=ov16_prev_rdt*100), alpha=0.5, color="black", size=0.5, data=df1 %>% filter(age_groups > 0)) +
+plot_1 <- ggplot() + geom_point(aes(x=age_groups, y=ov16_prev_rdt*100), alpha=0.5, color="black", size=0.5, data=df1 %>% filter(age_groups > 0)) +
     geom_errorbar(aes(x=age_groups, ymin=(ov16_wilson_lb*100), ymax=(ov16_wilson_ub*100)), width=2.5, alpha=0.5, colour="black", data=df1 %>% filter(age_groups > 0)) +
-   geom_line(aes(x=age_groups, y=ov16_prev*100, color=Hypothesis, linetype=Hypothesis), linewidth=0.6, data=plot_5_best_hyp %>% filter((exposure == "EPIONCHO exposure" & Hypothesis %in% c("H4ii", "H4iii")) | (exposure == "ONCHOSIM exposure" & Hypothesis %in% c("H4ii", "H4iii")))) +
-    geom_ribbon(aes(x=age_groups, ymin=ov16_lower*100, ymax=ov16_upper*100, fill=Hypothesis), color=NA, alpha=0.1, data=plot_5_best_hyp %>% filter((exposure == "EPIONCHO exposure" & Hypothesis %in% c("H4ii", "H4iii")) | (exposure == "ONCHOSIM exposure" & Hypothesis %in% c("H4ii", "H4iii")))) +
+   geom_line(aes(x=age_groups, y=ov16_prev*100, color=Hypothesis, linetype=Hypothesis), linewidth=0.6, data=plot_best_hyp %>% filter((exposure == "EPIONCHO exposure" & Hypothesis %in% c("H4ii", "H4iii")) | (exposure == "ONCHOSIM exposure" & Hypothesis %in% c("H4ii", "H4iii")))) +
+    geom_ribbon(aes(x=age_groups, ymin=ov16_lower*100, ymax=ov16_upper*100, fill=Hypothesis), color=NA, alpha=0.1, data=plot_best_hyp %>% filter((exposure == "EPIONCHO exposure" & Hypothesis %in% c("H4ii", "H4iii")) | (exposure == "ONCHOSIM exposure" & Hypothesis %in% c("H4ii", "H4iii")))) +
   scale_color_manual(name="Hypotheses", values=c("black", "black")) +
   scale_fill_manual(name="Hypotheses", values=c("black", "black")) +
   scale_linetype_manual(name="Hypotheses", values=c("H4iii"="solid", "H4ii"="dotted")) +
@@ -1843,14 +1420,14 @@ plot_5 <- ggplot() + geom_point(aes(x=age_groups, y=ov16_prev_rdt*100), alpha=0.
     strip.text.y = element_text(angle=0),
     axis.line.y.right = element_blank()
   )
-plot_5
+plot_1
 
-ggsave(paste0("images/images_", output_version,"/best_fitting_hyp_using_sampled_diagnostic_performance.svg"), plot_5, width=4250, height=3000, units="px", dpi=600)
+ggsave(paste0("images/images_", output_version,"/best_fitting_hyp_using_sampled_diagnostic_performance.svg"), plot_1, width=4250, height=3000, units="px", dpi=600)
 
-plot_6 <- ggplot() + geom_point(aes(x=age_groups, y=ov16_prev_rdt*100), alpha=0.5, color="black", size=0.5, data=df1 %>% filter(age_groups > 0)) +
+plot_2 <- ggplot() + geom_point(aes(x=age_groups, y=ov16_prev_rdt*100), alpha=0.5, color="black", size=0.5, data=df1 %>% filter(age_groups > 0)) +
     geom_errorbar(aes(x=age_groups, ymin=(ov16_wilson_lb*100), ymax=(ov16_wilson_ub*100)), width=2.5, alpha=0.5, colour="black", data=df1 %>% filter(age_groups > 0)) +
-   geom_line(aes(x=age_groups, y=ov16_prev*100, color=Hypothesis, linetype=Hypothesis), linewidth=0.6, data=plot_5_best_hyp) +
-    geom_ribbon(aes(x=age_groups, ymin=ov16_lower*100, ymax=ov16_upper*100, fill=Hypothesis), color=NA, alpha=0.1, data=plot_5_best_hyp) +
+   geom_line(aes(x=age_groups, y=ov16_prev*100, color=Hypothesis, linetype=Hypothesis), linewidth=0.6, data=plot_best_hyp) +
+    geom_ribbon(aes(x=age_groups, ymin=ov16_lower*100, ymax=ov16_upper*100, fill=Hypothesis), color=NA, alpha=0.1, data=plot_best_hyp) +
   scale_color_manual(name="Hypotheses", values=c("black", "black", "black", "black", "black", "black", "black")) +
   scale_fill_manual(name="Hypotheses", values=c("black", "black", "black", "black", "black", "black", "black")) +
   scale_linetype_manual(name="Hypotheses", values=c("H3ii"="dotted", "H1ii-2ii"="dashed", "H1i-3i"="solid", "H1iii-3iii"="solid", "H4i"="solid", "H4ii"="solid", "H4iii"="solid")) +
@@ -1878,8 +1455,8 @@ plot_6 <- ggplot() + geom_point(aes(x=age_groups, y=ov16_prev_rdt*100), alpha=0.
     strip.text.y = element_text(angle=0),
     axis.line.y.right = element_blank()
   )
-plot_6
+plot_2
 
-ggsave(paste0("images/images_", output_version,"/all_hyp_using_sampled_diagnostic_performance.svg"), plot_6, width=4250, height=3000, units="px", dpi=600)
+ggsave(paste0("images/images_", output_version,"/all_hyp_using_sampled_diagnostic_performance.svg"), plot_2, width=4250, height=3000, units="px", dpi=600)
 
 ```
