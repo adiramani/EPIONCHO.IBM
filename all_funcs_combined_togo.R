@@ -1528,8 +1528,8 @@ ep.equi.sim <- function(time.its,
     #mean number of L3 in fly population
     L3.in <- mean(all.mats.cur[, 6])
 
+    ABR_ctrl <- ABR
     # Uncomment to vary ABR
-    # ABR_ctrl <- ABR
     # last_change <- -1
     # if (i >= vc.iter.strt && (i %/% 365 > last_change)) {
     #   abr_mult <- runif(1, 0.98, 1.02)
