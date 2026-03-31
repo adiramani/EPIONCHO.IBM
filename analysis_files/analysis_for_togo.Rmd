@@ -6,7 +6,7 @@ output: html_document
 ---
 
 # Initial Setup
-This chunk initializes the libraries and variables needed for the analysis code below. `data_folder` should be the path to the post-processed output of running `all_funcs_combined_togo.R` with 9000 iterations. You can post-process the data using code from `processRCSFilesTogo.R`. The relative path to the post-processed data (from the working directory) is expected to be `data/{prefecture}{folder variable}/`.
+This chunk initializes the libraries and variables needed for the analysis code below. `data_folder` should be the path to the post-processed output of running `all_funcs_combined_togo.R` with 13,500 iterations. You can post-process the data using code from `processDataTogo.R`. The relative path to the post-processed data (from the working directory) is expected to be `data/{data_folder}/`.
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 set.seed(7281998)
@@ -139,7 +139,6 @@ togoOv16 <- function() {
 togoVillage <- function() {
   riverBasin <- c(rep('Oti', 3), rep('Keran', 4), rep('Mo', 4))
   # https://journals.plos.org/plosntds/article/figure?id=10.1371/journal.pntd.0006312.g002
-  # https://www.citypopulation.de/en/togo/admin/
   prefecture <- c('OTI/KPENDJAL', 'OTI/KPENDJAL', 'OTI/KPENDJAL', #c('KPENDJAL', 'KPENDJAL', 'OTI',#
                   'Keran', 'Keran', 'Keran', 'Keran',
                   'Bassar', 'Bassar', 'Bassar', 'Bassar')

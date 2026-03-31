@@ -5,7 +5,7 @@ date: "2023-06-09"
 output: html_document
 ---
 
-This chunk initializes the libraries and variables needed for the analysis code below. `data_folder` should be the path to the post-processed output of running `all_funcs_combined.R` with 6000 iterations. You can post-process the data using code from `processRCSFilesGabon.R`. 
+This chunk initializes the libraries and variables needed for the analysis code below. `data_folder` should be the path to the post-processed output of running `all_funcs_combined.R` with 6000 iterations. You can post-process the data using code from `processGabonData.R`. 
 `mfp_test_folder` should be the path to the post-processed output of running `all_funcs_combined.R` using methods from section 3.1 of the Running_EPIONCHO_IBM_Ov16 vignette. If you do not want to run this, you can set the `run_mfp` variable to FALSE.
 
 In case you want to use results with onchosim exposure, you will also have to run the above, however with `all_funcs_combined_onchosim.R`, and setting `use_onchosim = TRUE` in the code chunk below. Note that when running the analysis code with ONCHOSIM exposure, the code expects there to still be results for the model using EPIONCHO exposure.
@@ -87,7 +87,7 @@ readGabonData <- function() {
       Age <= 75 ~ (ceiling(Age/5)*5) - 2.5,
       TRUE ~ 77.5
     )
-  ) %>% filter(!is.na(mf_pos) & !is.na(ov16_seropos)) #filter(!is.na(ov16_seropos))
+  ) %>% filter(!is.na(mf_pos) & !is.na(ov16_seropos))
   
   print(paste("Total Individuals:", length(unique(data$Individual_ID))))
   print(paste("Male to Female Ratio:", mean(((data[,'Sex (1=M, 2=F)']-2)*-1))))
@@ -350,7 +350,6 @@ summarizeSimulationData <- function(data, sensSpec=c(1,1), groupBySex=TRUE) {
   
   data$probs <- runif(dim(data)[1])
   setDT(data)
-  #for (sens_spec in sensSpec) {
   for (index in seq_along(sensSpec)) {
     t0 <- proc.time()[3]
     sens_spec = sensSpec[[index]]
